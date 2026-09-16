@@ -76,6 +76,27 @@ test("required generated hero assets exist", () => {
   assert.equal(existsSync("public/images/generated/home-hero-mobile.webp"), true);
 });
 
+test("Polish 1 homepage uses the supplied brand logo and commerce-first copy", () => {
+  const homepage = readFileSync("app/page.tsx", "utf8");
+  const header = readFileSync("components/layout/SiteHeader.tsx", "utf8");
+
+  assert.equal(existsSync("public/brand/sri-hari-suvai-logo.png"), true);
+  assert.match(header, /sri-hari-suvai-logo\.png/);
+  assert.match(homepage, />Shop products</);
+  assert.doesNotMatch(homepage, /A focused home|From discovery|Simple choices|Unknowns stay out/);
+});
+
+test("Polish 1 section navigation is desktop-only, locked per gesture, and reduced-motion aware", () => {
+  const scroller = readFileSync("components/home/HomepageSectionScroller.tsx", "utf8");
+
+  assert.match(scroller, /min-width: 1041px/);
+  assert.match(scroller, /passive: false/);
+  assert.match(scroller, /if \(locked\)/);
+  assert.match(scroller, /scrollend/);
+  assert.match(scroller, /prefers-reduced-motion: reduce/);
+  assert.match(scroller, /reducedMotion\.matches \? "auto" : "smooth"/);
+});
+
 test("reduced-motion styles disable nonessential motion and keep reveals visible", () => {
   const css = readFileSync("app/globals.css", "utf8");
   const motionSystem = readFileSync("components/motion/MotionSystem.tsx", "utf8");

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -75,7 +76,14 @@ export function SiteHeader() {
     <header className={scrolled || open ? "site-header site-header--solid" : "site-header"}>
       <div className="header-inner shell">
         <Link className="wordmark" href="/" aria-label="Sri Hari Suvai home">
-          <span className="wordmark-mark" aria-hidden="true">SH</span>
+          <Image
+            className="wordmark-logo"
+            src="/brand/sri-hari-suvai-logo.png"
+            alt=""
+            width={64}
+            height={64}
+            priority
+          />
           <span>Sri Hari Suvai</span>
         </Link>
 

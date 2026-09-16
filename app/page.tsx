@@ -1,12 +1,16 @@
 import { getImageProps } from "next/image";
 import Link from "next/link";
 
+import { HomepageSectionScroller } from "@/components/home/HomepageSectionScroller";
 import { FeaturedProducts } from "@/components/sections/FeaturedProducts";
-import { ProductJourneyScroller } from "@/components/sections/ProductJourneyScroller";
-import { siteConfig } from "@/lib/site";
+import { ProductSpotlight } from "@/components/sections/ProductSpotlight";
+import { buildHeroImageMap } from "@/lib/assets";
+import { getPublicCatalogue } from "@/lib/catalogue";
 
-export default function HomePage() {
-  const hasContact = Boolean(siteConfig.whatsappNumber || siteConfig.email);
+export default async function HomePage() {
+  const products = await getPublicCatalogue();
+  const spotlight = products.find((product) => product.slug === "idly-podi") ?? products[0];
+  const spotlightImage = spotlight ? buildHeroImageMap([spotlight])[spotlight.slug] : null;
   const imageAlt = "A bowl of roasted spice powder in a warm South Indian culinary setting";
   const { props: desktopHero } = getImageProps({
     src: "/images/generated/home-hero-desktop.webp",
@@ -26,8 +30,8 @@ export default function HomePage() {
   });
 
   return (
-    <>
-      <section className="home-hero" aria-labelledby="hero-heading">
+    <HomepageSectionScroller>
+      <section className="homepage-section home-hero" data-home-section aria-labelledby="hero-heading">
         <picture className="hero-picture">
           <source media="(max-width: 640px)" srcSet={mobileHero.srcSet} />
           <img {...desktopHero} alt={imageAlt} className="hero-image" />
@@ -37,72 +41,26 @@ export default function HomePage() {
           <p className="eyebrow hero-eyebrow">South Indian food products</p>
           <h1 id="hero-heading">Flavour, presented with quiet confidence.</h1>
           <p className="hero-copy">
-            Discover the Sri Hari Suvai catalogue through clear product detail,
-            thoughtful imagery and a direct path to enquiry.
+            Shop South Indian podis and mixes with clear prices, pack sizes and a direct path to your cart.
           </p>
           <div className="button-row">
-            <Link className="button" href="/products">Explore products</Link>
-            {hasContact ? (
-              <Link className="button button--secondary" href="/contact">Make an enquiry</Link>
-            ) : null}
-          </div>
-        </div>
-        <a className="hero-scroll" href="#introduction">Discover <span aria-hidden="true">↓</span></a>
-      </section>
-
-      <section id="introduction" className="introduction section shell" aria-labelledby="intro-heading">
-        <p className="eyebrow">Sri Hari Suvai</p>
-        <div className="intro-grid">
-          <h2 id="intro-heading">A focused home for South Indian food products.</h2>
-          <div>
-            <p className="lead">
-              The catalogue is designed to make each product easy to understand—what it is,
-              what is known about it, and how to enquire.
-            </p>
-            <p>
-              Product facts, pack information and contact options appear only when approved,
-              keeping the experience useful without filling gaps with assumptions.
-            </p>
+            <Link className="button" href="/shop">Shop products</Link>
           </div>
         </div>
       </section>
 
-      <FeaturedProducts />
-      <ProductJourneyScroller />
+      <FeaturedProducts products={products} />
+      {spotlight ? <ProductSpotlight product={spotlight} imageSrc={spotlightImage} /> : null}
 
-      <section className="principles section shell" aria-labelledby="principles-heading">
-        <div className="section-heading section-heading--center">
-          <p className="eyebrow">Made to be understood</p>
-          <h2 id="principles-heading">Simple choices. Honest detail.</h2>
-        </div>
-        <div className="principle-grid">
-          <article>
-            <span>01</span>
-            <h3>Products stay central</h3>
-            <p>Each page is structured around the product name, image and useful approved details.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>Unknowns stay out</h3>
-            <p>Unsupported claims, prices, certifications and policies are deliberately omitted.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>Enquiries stay direct</h3>
-            <p>A configured email or WhatsApp channel becomes the single clear conversion path.</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="closing-cta" aria-labelledby="closing-heading">
+      <section className="homepage-section closing-cta home-closing-cta" data-home-section aria-labelledby="closing-heading">
         <div className="shell closing-cta-inner">
           <div>
-            <p className="eyebrow">Continue exploring</p>
-            <h2 id="closing-heading">See the complete product catalogue.</h2>
+            <h2 id="closing-heading">Find the right mix for your table.</h2>
+            <p>Browse every product, compare pack sizes and choose what belongs in your kitchen.</p>
           </div>
-          <Link className="button button--light" href="/products">Explore products</Link>
+          <Link className="button button--light" href="/shop">Shop the complete range</Link>
         </div>
       </section>
-    </>
+    </HomepageSectionScroller>
   );
 }

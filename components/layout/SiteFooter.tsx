@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { buildMailtoHref, buildWhatsAppHref } from "@/lib/ordering";
@@ -12,7 +13,13 @@ export function SiteFooter() {
       <div className="footer-main shell">
         <div className="footer-brand">
           <Link className="wordmark wordmark--footer" href="/">
-            <span className="wordmark-mark" aria-hidden="true">SH</span>
+            <Image
+              className="wordmark-logo"
+              src="/brand/sri-hari-suvai-logo.png"
+              alt=""
+              width={64}
+              height={64}
+            />
             <span>Sri Hari Suvai</span>
           </Link>
           <p>South Indian food products, presented with clarity and care.</p>
@@ -45,7 +52,6 @@ export function SiteFooter() {
       </div>
       <div className="footer-bottom shell">
         <p>© {new Date().getFullYear()} Sri Hari Suvai.</p>
-        <p>Product and contact details are shown only when approved.</p>
       </div>
     </footer>
   );
