@@ -26,11 +26,11 @@ with required_tables(table_name) as (
   union all
   select
     'catalogue_active_state',
-    count(*) filter (where p.active) = 16
+    count(distinct p.id) filter (where p.active) = 16
       and count(v.*) filter (where p.active and v.active) = 64,
     format(
       'active_products=%s active_variants=%s',
-      count(*) filter (where p.active),
+      count(distinct p.id) filter (where p.active),
       count(v.*) filter (where p.active and v.active)
     )
   from public.products p

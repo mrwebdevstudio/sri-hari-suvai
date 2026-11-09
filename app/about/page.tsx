@@ -1,64 +1,28 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
+import { RangeLinks } from "@/components/home/RangeLinks";
 
 export const metadata: Metadata = {
-  title: "Our story",
-  description: "The grounded product philosophy behind the Sri Hari Suvai website.",
+  title: "Our Story",
+  description: "Discover the South Indian kitchen traditions behind Sri Hari Suvai’s podis and mixes.",
   alternates: { canonical: "/about" },
-  openGraph: {
-    title: "Our story | Sri Hari Suvai",
-    description: "The grounded product philosophy behind the Sri Hari Suvai website.",
-    url: "/about",
-  },
 };
 
 export default function AboutPage() {
   return (
-    <div className="page-wrap">
-      <header className="story-hero shell">
-        <div>
-          <p className="eyebrow">Our story</p>
-          <h1>A product story without invented history.</h1>
+    <article className="about-store">
+      <div className="story-spread store-shell">
+        <div className="story-portrait"><Image src="/images/storefront/grinding-spices.webp" alt="A stone mortar, whole spices and brass bowls in the kitchen" fill sizes="(max-width: 700px) 100vw, 50vw" preload /></div>
+        <div className="story-editorial">
+          <p className="eyebrow">Our story</p><h1>The Sri Hari Suvai kitchen</h1>
+          <span className="lotus-rule" aria-hidden="true" />
+          <p>In a South Indian kitchen, a small spoonful of podi can shape a whole meal. It gives rasam its warmth, brings depth to sambar, and turns a plate of hot rice into lunch.</p>
+          <p>Sri Hari Suvai brings those flavours together in two ranges. Our Instant Mix range helps you prepare familiar dishes. Our Direct Mix podis go straight onto rice or alongside favourites like idli and dosa.</p>
+          <Link className="button" href="/shop">Shop the pantry</Link>
         </div>
-        <p className="lead">
-          Sri Hari Suvai is presented here as a focused South Indian food-products brand.
-          Detailed history, manufacturing claims and milestones remain absent until approved.
-        </p>
-      </header>
-
-      <section className="story-band">
-        <div className="shell story-band-grid">
-          <p className="story-quote">
-            Good product storytelling starts with what can be shown clearly—and stops before assumption becomes claim.
-          </p>
-          <div className="story-notes">
-            <div>
-              <span>01</span>
-              <h2>Flavour first</h2>
-              <p>The visual language draws from South Indian kitchens while keeping the products central.</p>
-            </div>
-            <div>
-              <span>02</span>
-              <h2>Facts in context</h2>
-              <p>Approved ingredients, usage and pack details sit close to the product they describe.</p>
-            </div>
-            <div>
-              <span>03</span>
-              <h2>A direct next step</h2>
-              <p>Configured enquiry channels replace dead forms or unsupported commerce promises.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section shell story-closing" aria-labelledby="story-closing-heading">
-        <p className="eyebrow">The catalogue</p>
-        <h2 id="story-closing-heading">Let the products carry the story.</h2>
-        <p>
-          Product pages are ready to grow from approved names, imagery and detail without changing the underlying experience.
-        </p>
-        <Link className="button" href="/products">Explore products</Link>
-      </section>
-    </div>
+      </div>
+      <section className="store-shell about-ranges"><h2 className="ruled-title">Explore Our Range</h2><RangeLinks /></section>
+    </article>
   );
 }

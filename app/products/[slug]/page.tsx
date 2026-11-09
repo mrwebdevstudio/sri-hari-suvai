@@ -10,7 +10,7 @@ import { JsonLd } from "@/components/ui/JsonLd";
 import { buildHeroImageMap, resolveHeroPng } from "@/lib/assets";
 import { breadcrumbJsonLd, productJsonLd } from "@/lib/jsonld";
 import { products } from "@/lib/products";
-import { getPublicCatalogue, getPublicProduct } from "@/lib/catalogue";
+import { getPublicCatalogue, getPublicCatalogueState, getPublicProduct } from "@/lib/catalogue";
 
 type ProductPageProps = { params: Promise<{ slug: string }> };
 
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const { slug } = await params;
   const product = await getPublicProduct(slug);
   if (!product) return {};
-  const heroSrc = resolveHeroPng(product.slug);
+  const heroSrc = product.imagePath || resolveHeroPng(product.slug);
 
   return {
     title: product.name,
@@ -46,9 +46,11 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
+  const state = await getPublicCatalogueState();
+  if (!state.available) return <div className="page-wrap shell empty-state"><h1>Product details are temporarily unavailable.</h1><p>Please try again shortly.</p></div>;
   const product = await getPublicProduct(slug);
   if (!product) notFound();
-  const heroSrc = resolveHeroPng(product.slug);
+  const heroSrc = product.imagePath || resolveHeroPng(product.slug);
   const catalogue = await getPublicCatalogue();
   const related = catalogue
     .filter((candidate) => candidate.slug !== product.slug)

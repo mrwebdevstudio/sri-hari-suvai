@@ -27,7 +27,7 @@ export function ProductCard({
               src={heroSrc}
               alt={product.imageAlt}
               fill
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              sizes="(max-width: 640px) 70vw, (max-width: 1040px) 34vw, (max-width: 1466px) 22vw, 318px"
             />
           ) : (
             <AnimatedImagePlaceholder

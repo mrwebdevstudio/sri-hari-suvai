@@ -1,26 +1,38 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getAuthCallbackRedirect, resolveAuthCallbackFlow } from "@/lib/auth-flow";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-function safeNext(value: string | null): string {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/account";
+function supportedOtpType(value: string | null): EmailOtpType | null {
+  return value === "email" || value === "recovery" ? value : null;
+}
+
+function redirectWithoutAuthState(request: NextRequest, path: string) {
+  const response = NextResponse.redirect(new URL(path, request.nextUrl.origin));
+  response.headers.set("Cache-Control", "private, no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
 }
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const next = safeNext(params.get("next"));
+  const next = params.get("next");
   const code = params.get("code");
   const tokenHash = params.get("token_hash");
-  const type = params.get("type") as EmailOtpType | null;
+  const type = supportedOtpType(params.get("type"));
+  const flow = resolveAuthCallbackFlow(params.get("flow"), next, type);
   const supabase = await createServerSupabaseClient();
 
-  const result = code
-    ? await supabase.auth.exchangeCodeForSession(code)
-    : tokenHash && type
-      ? await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
-      : { error: new Error("Missing confirmation token.") };
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    return redirectWithoutAuthState(request, getAuthCallbackRedirect(flow, !error && Boolean(data.session), next));
+  }
 
-  if (!result.error) return NextResponse.redirect(new URL(next, request.url));
-  return NextResponse.redirect(new URL("/login?error=Confirmation%20link%20is%20invalid%20or%20expired.", request.url));
+  if (tokenHash && type) {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+    return redirectWithoutAuthState(request, getAuthCallbackRedirect(flow, !error, next));
+  }
+
+  return redirectWithoutAuthState(request, getAuthCallbackRedirect(flow, false, next));
 }

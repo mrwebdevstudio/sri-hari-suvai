@@ -7,10 +7,14 @@ import { MotionSystem } from "@/components/motion/MotionSystem";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { JsonLd } from "@/components/ui/JsonLd";
 import { websiteJsonLd } from "@/lib/jsonld";
-import { getPublicCatalogue } from "@/lib/catalogue";
+import { getPublicCatalogueState } from "@/lib/catalogue";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
+import { getPublicStoreSettings } from "@/lib/store";
+import { formatPrice } from "@/lib/currency";
+
 import "./globals.css";
+import "./storefront.css";
 
 const displayFont = Cormorant_Garamond({
   variable: "--font-display",
@@ -51,11 +55,13 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#f6efe3",
+  themeColor: "#68131b",
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const catalogue = await getPublicCatalogue();
+  const [catalogue, settings] = await Promise.all([getPublicCatalogueState(), getPublicStoreSettings()]);
+  const threshold = settings.freeShippingThresholdPaise;
+  const shipping = settings.checkoutEnabled && threshold !== null && threshold > 0 ? "Free shipping on orders from " + formatPrice(threshold) : undefined;
   return (
     <html
       lang="en"
@@ -64,9 +70,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     >
       <body>
         <a className="skip-link" href="#main-content">Skip to content</a>
-        <CartProvider catalogue={catalogue}>
-          <SiteHeader />
-          <main id="main-content">{children}</main>
+        <CartProvider catalogue={catalogue.products} catalogueAvailable={catalogue.available}>
+          <SiteHeader shipping={shipping} />
+          <main id="main-content">{!catalogue.available ? <div className="catalogue-notice shell" role="status"><p className="form-message">Our catalogue is temporarily unavailable. Please try again shortly. Your saved cart has been kept.</p></div> : null}{children}</main>
           <SiteFooter />
           <MotionSystem />
         </CartProvider>

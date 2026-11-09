@@ -1,66 +1,67 @@
-import { getImageProps } from "next/image";
+import Image from "next/image";
 import Link from "next/link";
 
-import { HomepageSectionScroller } from "@/components/home/HomepageSectionScroller";
-import { FeaturedProducts } from "@/components/sections/FeaturedProducts";
-import { ProductSpotlight } from "@/components/sections/ProductSpotlight";
-import { buildHeroImageMap } from "@/lib/assets";
+import { KitchenPicks } from "@/components/home/KitchenPicks";
+import { RangeLinks } from "@/components/home/RangeLinks";
+import { StoreIcon } from "@/components/ui/StoreIcon";
+import { buildHeroImageMap, resolvePackIllustration } from "@/lib/assets";
+import { products as illustratedProducts } from "@/lib/products";
 import { getPublicCatalogue } from "@/lib/catalogue";
 
 export default async function HomePage() {
   const products = await getPublicCatalogue();
-  const spotlight = products.find((product) => product.slug === "idly-podi") ?? products[0];
-  const spotlightImage = spotlight ? buildHeroImageMap([spotlight])[spotlight.slug] : null;
-  const imageAlt = "A bowl of roasted spice powder in a warm South Indian culinary setting";
-  const { props: desktopHero } = getImageProps({
-    src: "/images/generated/home-hero-desktop.webp",
-    alt: imageAlt,
-    width: 1568,
-    height: 1003,
-    sizes: "100vw",
-    priority: true,
-  });
-  const { props: mobileHero } = getImageProps({
-    src: "/images/generated/home-hero-mobile.webp",
-    alt: imageAlt,
-    width: 1003,
-    height: 1568,
-    sizes: "100vw",
-    priority: true,
+  const images = buildHeroImageMap(products);
+  const featured = new Map(["sambar-podi", "rasam-podi", "vathakkuzhambu-podi", "morkuzhambu-podi", "vendhya-kuzhambu-podi", "arisi-upma-mix"].map((slug, index) => [slug, index]));
+  const ordered = [...products].sort((a, b) => (featured.get(a.slug) ?? featured.size) - (featured.get(b.slug) ?? featured.size));
+  const picks = ordered.flatMap(product => {
+    const pack = product.variants.find(variant => variant.available !== false);
+    if (!pack) return [];
+    const matchesLabel = images[product.slug] === "/images/products/" + product.slug + ".png" &&
+      illustratedProducts.some(item => item.slug === product.slug && item.name === product.name && item.category === product.category);
+    const packArt = matchesLabel ? resolvePackIllustration(product.slug) : null;
+    return [{ slug: product.slug, name: product.name, category: product.category, image: packArt ?? images[product.slug], illustrated: Boolean(packArt), weight: pack.weightGrams, price: pack.pricePaise }];
   });
 
   return (
-    <HomepageSectionScroller>
-      <section className="homepage-section home-hero" data-home-section aria-labelledby="hero-heading">
-        <picture className="hero-picture">
-          <source media="(max-width: 640px)" srcSet={mobileHero.srcSet} />
-          <img {...desktopHero} alt={imageAlt} className="hero-image" />
+    <div className="home-store">
+      <section className="kitchen-hero" aria-labelledby="hero-title">
+        <picture>
+          <source media="(orientation: portrait)" srcSet="/images/storefront/kitchen-hero-portrait.webp" />
+          <Image className="kitchen-photo" src="/images/storefront/kitchen-hero-hd.webp" alt="Brass bowls of spice powder and a banana-leaf meal in a South Indian kitchen" fill unoptimized loading="eager" fetchPriority="high" />
         </picture>
-        <div className="hero-shade" aria-hidden="true" />
-        <div className="hero-content shell">
-          <p className="eyebrow hero-eyebrow">South Indian food products</p>
-          <h1 id="hero-heading">Flavour, presented with quiet confidence.</h1>
-          <p className="hero-copy">
-            Shop South Indian podis and mixes with clear prices, pack sizes and a direct path to your cart.
-          </p>
-          <div className="button-row">
-            <Link className="button" href="/shop">Shop products</Link>
+        <div className="hero-inner store-shell">
+          <div className="kitchen-hero-copy">
+            <h1 id="hero-title">Authentic<br />South Indian Mixes<br />from Our Home Kitchen</h1>
+            <span className="lotus-rule light-rule" aria-hidden="true" />
+            <p>Traditional recipes <b>·</b> Pure ingredients <b>·</b> Made with care</p>
+            <Link href="/shop" className="button hero-button">Shop Now <StoreIcon name="chevron-right" /></Link>
           </div>
         </div>
       </section>
 
-      <FeaturedProducts products={products} />
-      {spotlight ? <ProductSpotlight product={spotlight} imageSrc={spotlightImage} /> : null}
-
-      <section className="homepage-section closing-cta home-closing-cta" data-home-section aria-labelledby="closing-heading">
-        <div className="shell closing-cta-inner">
-          <div>
-            <h2 id="closing-heading">Find the right mix for your table.</h2>
-            <p>Browse every product, compare pack sizes and choose what belongs in your kitchen.</p>
-          </div>
-          <Link className="button button--light" href="/shop">Shop the complete range</Link>
+      <section className="home-range" aria-labelledby="range-title">
+        <div className="store-shell">
+          <h2 className="ruled-title" id="range-title">Explore Our Range</h2>
+          <span className="lotus-rule" aria-hidden="true" />
+          <RangeLinks />
         </div>
       </section>
-    </HomepageSectionScroller>
+      <KitchenPicks items={picks} />
+
+      <section className="home-story" aria-labelledby="story-title">
+        <div className="story-image"><Image src="/images/storefront/grinding-spices.webp" alt="Grinding spices by hand with a stone mortar and pestle" fill unoptimized /></div>
+        <div className="home-story-copy">
+          <h2 id="story-title"><Link href="/about">The “Sri Hari Suvai” Story</Link></h2>
+          <span className="lotus-rule" aria-hidden="true" />
+          <p>There’s a place for podi at every South Indian table. From sambar simmering on the stove to a spoonful of spice folded into hot rice, our mixes bring the flavours of the home kitchen to everyday meals. <Link href="/about" className="story-link">Read our story</Link></p>
+          <ul className="story-values" aria-label="Our kitchen traditions">
+            <li><StoreIcon name="story-leaf" />Carefully chosen<br />spices</li>
+            <li><StoreIcon name="story-mortar" />Traditional<br />recipes</li>
+            <li><StoreIcon name="story-sprout" />Everyday<br />pantry staples</li>
+            <li><StoreIcon name="story-rosette" />South Indian<br />flavours</li>
+          </ul>
+        </div>
+      </section>
+    </div>
   );
 }

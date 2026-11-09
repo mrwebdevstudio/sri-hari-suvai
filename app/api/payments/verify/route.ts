@@ -44,7 +44,9 @@ export async function POST(request: Request) {
     });
     if (error) throw error;
     if (applied) await sendOrderEmailEvent("payment_success", { orderNumber, email: order.email, amountPaise: order.grand_total_paise }).catch(() => undefined);
-    return NextResponse.json({ paymentStatus: "paid", orderNumber });
+    const { data: current, error: statusError } = await admin.from("orders").select("payment_status").eq("id", order.id).single();
+    if (statusError) throw statusError;
+    return NextResponse.json({ paymentStatus: current.payment_status, orderNumber });
   } catch (error) {
     logger.error("payment.verification_failed", { route: "/api/payments/verify", orderNumber, error });
     return NextResponse.json({ error: "Payment verification could not be completed. The order remains unfulfilled." }, { status: 500 });

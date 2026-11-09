@@ -36,7 +36,7 @@ export default async function CheckoutPage() {
   const [settings, defaults] = await Promise.all([getPublicStoreSettings(), getDefaults()]);
   return (
     <div className="page-wrap">
-      <header className="page-hero shell"><p className="eyebrow">Secure checkout</p><h1>Complete your order</h1><p>Products, prices, shipping, and totals are verified again on the server.</p></header>
+      <header className="page-hero shell"><p className="eyebrow">Secure checkout</p><h1>Complete your order</h1><p>Enter your delivery details and review your total before payment.</p></header>
       <section className="section section--first shell"><CheckoutForm settings={settings} defaults={defaults} /></section>
     </div>
   );

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-import { buildHeroImageMap, resolveHeroPng } from "../lib/assets.ts";
+import { buildHeroImageMap, resolveHeroPng, resolvePackIllustration } from "../lib/assets.ts";
 import {
   buildMailtoHref,
   buildWhatsAppHref,
@@ -71,30 +71,15 @@ test("Sprint 1 shop and cart routes exist", () => {
   assert.equal(existsSync("app/cart/page.tsx"), true);
 });
 
-test("required generated hero assets exist", () => {
-  assert.equal(existsSync("public/images/generated/home-hero-desktop.webp"), true);
-  assert.equal(existsSync("public/images/generated/home-hero-mobile.webp"), true);
-});
-
-test("Polish 1 homepage uses the supplied brand logo and commerce-first copy", () => {
-  const homepage = readFileSync("app/page.tsx", "utf8");
-  const header = readFileSync("components/layout/SiteHeader.tsx", "utf8");
-
-  assert.equal(existsSync("public/brand/sri-hari-suvai-logo.png"), true);
-  assert.match(header, /sri-hari-suvai-logo\.png/);
-  assert.match(homepage, />Shop products</);
-  assert.doesNotMatch(homepage, /A focused home|From discovery|Simple choices|Unknowns stay out/);
-});
-
-test("Polish 1 section navigation is desktop-only, locked per gesture, and reduced-motion aware", () => {
-  const scroller = readFileSync("components/home/HomepageSectionScroller.tsx", "utf8");
-
-  assert.match(scroller, /min-width: 1041px/);
-  assert.match(scroller, /passive: false/);
-  assert.match(scroller, /if \(locked\)/);
-  assert.match(scroller, /scrollend/);
-  assert.match(scroller, /prefers-reduced-motion: reduce/);
-  assert.match(scroller, /reducedMotion\.matches \? "auto" : "smooth"/);
+test("storefront supplies its kitchen photography and brand artwork", () => {
+  for (const name of ["kitchen-hero", "instant-range", "direct-range", "grinding-spices"]) {
+    assert.ok(existsSync(`public/images/storefront/${name}.webp`), name);
+  }
+  for (const product of products) assert.ok(resolvePackIllustration(product.slug), product.name);
+  assert.equal(resolvePackIllustration("../secret"), null);
+  assert.equal(resolvePackIllustration("new-product"), null);
+  assert.ok(existsSync("public/brand/spice-mark.png"));
+  assert.ok(existsSync("public/brand/wordmark.webp"));
 });
 
 test("reduced-motion styles disable nonessential motion and keep reveals visible", () => {

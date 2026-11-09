@@ -31,24 +31,33 @@ declare global {
 async function loadRazorpay(): Promise<boolean> {
   if (window.Razorpay) return true;
   return new Promise((resolve) => {
+    let finished = false;
+    const finish = (loaded: boolean) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      if (!loaded) document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')?.remove();
+      resolve(loaded);
+    };
+    const timeout = setTimeout(() => finish(false), 15_000);
     const existing = document.querySelector<HTMLScriptElement>('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
     if (existing) {
-      existing.addEventListener("load", () => resolve(true), { once: true });
-      existing.addEventListener("error", () => resolve(false), { once: true });
+      existing.addEventListener("load", () => finish(true), { once: true });
+      existing.addEventListener("error", () => finish(false), { once: true });
       return;
     }
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    script.onload = () => finish(true);
+    script.onerror = () => finish(false);
     document.head.appendChild(script);
   });
 }
 
 export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSettings; defaults: CheckoutDefaults }) {
   const router = useRouter();
-  const { items, subtotalPaise, clearCart, getProduct } = useCart();
+  const { items, subtotalPaise, clearCart, getProduct, catalogueAvailable } = useCart();
   const idempotencyKey = useRef<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
@@ -77,7 +86,10 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
         }),
       });
       const result = await response.json() as Record<string, string | number>;
-      if (!response.ok) throw new Error(String(result.error || "Checkout could not be started."));
+      if (!response.ok) {
+        if (result.code === "checkout_changed") idempotencyKey.current = null;
+        throw new Error(String(result.error || "Checkout could not be started."));
+      }
       if (!(await loadRazorpay()) || !window.Razorpay) throw new Error("Payment checkout could not be loaded.");
 
       const razorpay = new window.Razorpay({
@@ -89,19 +101,24 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
         order_id: result.razorpayOrderId,
         prefill: { name: values.name, email: values.email, contact: values.phone },
         handler: async (payment: RazorpaySuccess) => {
-          const verification = await fetch("/api/payments/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orderNumber: result.orderNumber, ...payment }),
-          });
-          const verified = await verification.json() as { error?: string; paymentStatus?: string };
-          if (!verification.ok) {
+          try {
+            const verification = await fetch("/api/payments/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ orderNumber: result.orderNumber, ...payment }),
+            });
+            const verified = await verification.json() as { error?: string; paymentStatus?: string };
+            if (!verification.ok) {
+              setSubmitting(false);
+              setMessage(verified.error || "Payment verification failed. Your order was not marked paid.");
+              return;
+            }
+            clearCart();
+            router.push(`/order-confirmation?order=${encodeURIComponent(String(result.orderNumber))}`);
+          } catch {
             setSubmitting(false);
-            setMessage(verified.error || "Payment verification failed. Your order was not marked paid.");
-            return;
+            setMessage(`We could not check the payment status. Track order ${result.orderNumber} before making another payment.`);
           }
-          clearCart();
-          router.push(`/order-confirmation?order=${encodeURIComponent(String(result.orderNumber))}&payment=${encodeURIComponent(verified.paymentStatus || "pending")}`);
         },
         modal: { ondismiss: () => { setSubmitting(false); setMessage("Payment was not completed. Your pending order can be retried from checkout."); } },
         theme: { color: "#7a2f21" },
@@ -114,6 +131,7 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
     }
   }
 
+  if (!catalogueAvailable) return <div className="empty-state"><h2>Checkout is temporarily unavailable.</h2><p>We cannot verify current product prices. Your saved cart has been kept; please try again shortly.</p></div>;
   if (!items.length) return <div className="empty-state"><p className="eyebrow">Checkout</p><h2>Your cart is empty.</h2><Link className="button" href="/shop">Continue shopping</Link></div>;
   if (!settings.checkoutEnabled || shippingPaise === null) {
     const orderingDisabled = !settings.productOrderingEnabled;

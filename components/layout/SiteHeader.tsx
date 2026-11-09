@@ -1,151 +1,81 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useRef } from "react";
 import { CartButton } from "@/components/cart/CartProvider";
+import { BrandArrival } from "@/components/layout/BrandArrival";
+import { StoreIcon } from "@/components/ui/StoreIcon";
 
 const navigation = [
   { href: "/", label: "Home" },
-  { href: "/products", label: "Products" },
-  { href: "/shop", label: "Shop" },
-  { href: "/about", label: "Our story" },
-  { href: "/contact", label: "Contact" },
-  { href: "/track-order", label: "Track order" },
-  { href: "/account", label: "Account" },
+  { href: "/shop?range=instant", label: "Instant Mix" },
+  { href: "/shop?range=direct", label: "Direct Mix" },
+  { href: "/about", label: "Our Story" },
 ];
 
-function isCurrentPath(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === href;
-  return pathname === href || pathname.startsWith(href + "/");
+function NavLinks({ active, close }: { active?: string; close?: () => void }) {
+  return navigation.map(({ href, label }) => (
+    <Link key={href} href={href} aria-current={active === href ? "page" : undefined} onClick={close}>{label}</Link>
+  ));
 }
 
-export function SiteHeader() {
+function ActiveLinks({ close }: { close?: () => void }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const drawerRef = useRef<HTMLDivElement>(null);
+  const range = useSearchParams().get("range");
+  return <NavLinks active={pathname === "/shop" && range ? pathname + "?range=" + range : pathname} close={close} />;
+}
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 16);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const focusable = drawerRef.current?.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled])',
-    );
-    focusable?.[0]?.focus();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        menuButtonRef.current?.focus();
-        return;
-      }
-      if (event.key !== "Tab" || !focusable?.length) return;
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open]);
+export function SiteHeader({ shipping }: { shipping?: string }) {
+  const menu = useRef<HTMLDialogElement>(null);
+  const search = useRef<HTMLDialogElement>(null);
+  const router = useRouter();
+  const closeMenu = () => menu.current?.close();
 
   return (
-    <header className={scrolled || open ? "site-header site-header--solid" : "site-header"}>
-      <div className="header-inner shell">
-        <Link className="wordmark" href="/" aria-label="Sri Hari Suvai home">
-          <Image
-            className="wordmark-logo"
-            src="/brand/sri-hari-suvai-logo.png"
-            alt=""
-            width={64}
-            height={64}
-            priority
-          />
-          <span>Sri Hari Suvai</span>
-        </Link>
-
-        <nav className="desktop-nav" aria-label="Primary navigation">
-          {navigation.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
-            >
-              {item.label}
-            </Link>
-          ))}
+    <header className="store-header">
+      <div className="store-ribbon"><div className="store-shell">
+        <Link href={shipping ? "/shop" : "/track-order"}><StoreIcon name="truck" />{shipping || "Track your order"}</Link>
+        <span><StoreIcon name="leaf" /> Traditional recipes <i /> South Indian taste</span>
+      </div></div>
+      <div className="store-bar store-shell">
+        <BrandArrival />
+        <nav className="store-nav" aria-label="Primary navigation">
+          <Suspense fallback={<NavLinks />}><ActiveLinks /></Suspense>
         </nav>
-
-        <div className="header-actions">
-          <Link className="button button--small header-shop-link" href="/shop">Shop now</Link>
+        <div className="store-actions">
+          <button aria-label="Search products" aria-haspopup="dialog" onClick={() => search.current?.showModal()}><StoreIcon name="search" /></button>
+          <Link href="/account" aria-label="My account"><StoreIcon name="person" /></Link>
           <CartButton />
+          <button className="store-menu-toggle" aria-label="Open menu" aria-haspopup="dialog" onClick={() => menu.current?.showModal()}><StoreIcon name="list" /></button>
         </div>
-
-        <button
-          ref={menuButtonRef}
-          className="menu-button"
-          type="button"
-          aria-expanded={open}
-          aria-controls="mobile-navigation"
-          onClick={() => setOpen((value) => !value)}
-        >
-          {open ? "Close" : "Menu"}
-        </button>
       </div>
-
-      {open ? (
-        <div className="mobile-nav-backdrop" onMouseDown={() => setOpen(false)}>
-          <div
-            id="mobile-navigation"
-            ref={drawerRef}
-            className="mobile-nav"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Site navigation"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">Navigate</p>
-            <nav aria-label="Mobile navigation">
-              {navigation.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
-                  onClick={() => setOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-            <Link className="button" href="/shop" onClick={() => setOpen(false)}>
-              Shop now
-            </Link>
-          </div>
+      <dialog ref={menu} className="store-dialog store-menu" aria-labelledby="menu-title" onClick={event => { if (event.target === event.currentTarget) closeMenu(); }}>
+        <div className="dialog-panel">
+          <div className="dialog-heading"><h2 id="menu-title">Menu</h2><button aria-label="Close menu" onClick={closeMenu}><StoreIcon name="x-lg" /></button></div>
+          <nav aria-label="Mobile navigation">
+            <Suspense fallback={<NavLinks close={closeMenu} />}><ActiveLinks close={closeMenu} /></Suspense>
+            <Link href="/products" onClick={closeMenu}>All products</Link>
+            <Link href="/track-order" onClick={closeMenu}>Track order</Link>
+            <Link href="/account" onClick={closeMenu}>My account</Link>
+            <Link href="/contact" onClick={closeMenu}>Contact</Link>
+          </nav>
         </div>
-      ) : null}
+      </dialog>
+      <dialog ref={search} className="store-dialog" aria-labelledby="search-title" onClick={event => { if (event.target === event.currentTarget) search.current?.close(); }}>
+        <div className="dialog-panel">
+          <div className="dialog-heading"><h2 id="search-title">Search the pantry</h2><button aria-label="Close search" onClick={() => search.current?.close()}><StoreIcon name="x-lg" /></button></div>
+          <form action="/products" onSubmit={event => {
+            event.preventDefault();
+            const query = String(new FormData(event.currentTarget).get("q") || "").trim();
+            search.current?.close();
+            router.push(query ? "/products?q=" + encodeURIComponent(query) : "/products");
+          }}>
+            <label htmlFor="header-search">Product name or category</label>
+            <div className="dialog-search"><input id="header-search" name="q" type="search" placeholder="Try sambar podi" autoFocus /><button className="button">Search</button></div>
+          </form>
+        </div>
+      </dialog>
     </header>
   );
 }

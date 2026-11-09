@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { sanitizeAuthDisplayText } from "@/lib/auth-flow";
+
 export function AuthShell({
   eyebrow,
   title,
@@ -28,6 +30,8 @@ export function AuthShell({
 }
 
 export function AuthMessage({ error, message }: { error?: string; message?: string }) {
-  if (!error && !message) return null;
-  return <p className={error ? "form-message form-message--error" : "form-message"} role="status">{error || message}</p>;
+  const safeError = sanitizeAuthDisplayText(error);
+  const safeMessage = sanitizeAuthDisplayText(message);
+  if (!safeError && !safeMessage) return null;
+  return <p className={safeError ? "form-message form-message--error" : "form-message"} role="status">{safeError || safeMessage}</p>;
 }

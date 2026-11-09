@@ -64,6 +64,7 @@ test("commerce migrations retain the required chronological order", () => {
     "20260710170000_sprint_2_commerce.sql",
     "20260710230000_sprint_3_operations.sql",
     "20260805090000_sprint_4_validation_hardening.sql",
+    "20260929100200_sprint_1_payment_event_safety.sql",
   ]);
 });
 

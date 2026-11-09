@@ -7,7 +7,8 @@ import { useCart } from "@/components/cart/CartProvider";
 import { formatPrice, formatWeight } from "@/lib/currency";
 
 export function CartContents() {
-  const { items, subtotalPaise, updateQuantity, removeItem, getProduct } = useCart();
+  const { items, subtotalPaise, updateQuantity, removeItem, getProduct, catalogueAvailable } = useCart();
+  if (!catalogueAvailable) return <div className="empty-state"><h2>Your saved cart is safe.</h2><p>We cannot check current prices right now. Please return shortly.</p></div>;
 
   if (!items.length) {
     return (
@@ -30,7 +31,7 @@ export function CartContents() {
           return (
             <article className="cart-page-item" key={`${item.productSlug}-${item.weightGrams}`}>
               <Link className="cart-page-image" href={`/products/${product.slug}`}>
-                <Image src={`/images/products/${product.slug}.png`} alt={product.imageAlt} fill sizes="(max-width: 640px) 112px, 150px" />
+                <Image src={product.imagePath || `/images/products/${product.slug}.png`} alt={product.imageAlt} fill sizes="(max-width: 640px) 112px, 150px" />
               </Link>
               <div className="cart-page-item-copy">
                 <p className="eyebrow">{product.category}</p>

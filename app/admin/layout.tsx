@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -18,7 +19,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="admin-shell">
       <header className="admin-header">
-        <div className="admin-brand"><span aria-hidden="true">SH</span><div><strong>Sri Hari Suvai</strong><small>Operations portal</small></div></div>
+        <div className="admin-brand"><Image src="/brand/spice-mark.png" alt="" width={38} height={46} /><div><strong>Sri Hari Suvai</strong><small>Operations portal</small></div></div>
         <AdminNav />
         <div className="admin-identity"><span title={admin.email || undefined}>{admin.email || "Admin"}</span><Link href="/">Storefront</Link><form action={logoutAction}><button type="submit">Log out</button></form></div>
       </header>

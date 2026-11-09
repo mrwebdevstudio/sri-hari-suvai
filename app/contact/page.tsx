@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { buildMailtoHref, buildWhatsAppHref } from "@/lib/ordering";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Contact Sri Hari Suvai through a configured enquiry channel.",
+  description: "Get in touch with Sri Hari Suvai for product and order enquiries.",
   alternates: { canonical: "/contact" },
   openGraph: {
     title: "Contact | Sri Hari Suvai",
-    description: "Contact Sri Hari Suvai through a configured enquiry channel.",
+    description: "Get in touch with Sri Hari Suvai for product and order enquiries.",
     url: "/contact",
   },
 };
@@ -23,9 +24,9 @@ export default function ContactPage() {
     <div className="page-wrap contact-page">
       <header className="page-hero shell">
         <p className="eyebrow">Contact</p>
-        <h1>A direct line, when you need one.</h1>
+        <h1>Get in touch</h1>
         <p>
-          Use an approved contact channel below. No form collects your details or pretends to send without a working backend.
+          Get in touch for questions about our products or an existing order.
         </p>
       </header>
 
@@ -33,7 +34,7 @@ export default function ContactPage() {
         <div className="contact-layout">
           <div>
             <p className="eyebrow">Enquiries</p>
-            <h2 id="contact-options-heading">Choose a configured channel.</h2>
+            <h2 id="contact-options-heading">How can we help?</h2>
           </div>
           {hasContact ? (
             <div className="contact-options">
@@ -56,7 +57,7 @@ export default function ContactPage() {
             <div className="empty-state empty-state--compact" role="status">
               <h2>Contact details are not published yet.</h2>
               <p>
-                Add an approved WhatsApp number or business email through the documented environment values to enable enquiries.
+                Our contact details will be available here soon. If you have an order number, you can <Link className="text-link" href="/track-order">track your order</Link>.
               </p>
             </div>
           )}

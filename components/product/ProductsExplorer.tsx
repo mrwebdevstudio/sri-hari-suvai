@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 
 import { ProductCard } from "@/components/product/ProductCard";
+import { ProductSearch } from "@/components/product/ProductSearch";
 import type { HeroImageMap } from "@/lib/assets";
 import { productCategories, type Product, type ProductCategory } from "@/lib/products";
 
 type CategoryFilter = "All" | ProductCategory;
 
-export function ProductsExplorer({ products, heroImages }: { products: readonly Product[]; heroImages: HeroImageMap }) {
-  const [query, setQuery] = useState("");
+export function ProductsExplorer({ products, heroImages, initialQuery }: { initialQuery: string; products: readonly Product[]; heroImages: HeroImageMap }) {
+  const [query, setQuery] = useState(initialQuery);
   const [category, setCategory] = useState<CategoryFilter>("All");
   const visibleProducts = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -27,10 +28,7 @@ export function ProductsExplorer({ products, heroImages }: { products: readonly 
   return (
     <div>
       <div className="catalogue-toolbar">
-        <div className="search-field">
-          <label htmlFor="product-search">Search products</label>
-          <input id="product-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name or category" />
-        </div>
+        <ProductSearch id="product-search" placeholder="Search by name or category" query={query} matches={visibleProducts} onQueryChange={setQuery} />
         <div className="category-filter" aria-label="Filter products by category">
           {(["All", ...productCategories] as const).map((option) => (
             <button key={option} type="button" aria-pressed={category === option} onClick={() => setCategory(option)}>{option}</button>
@@ -46,10 +44,10 @@ export function ProductsExplorer({ products, heroImages }: { products: readonly 
         const categoryProducts = visibleProducts.filter((product) => product.category === productCategory);
         if (!categoryProducts.length) return null;
         return (
-          <section className="catalogue-group" id={productCategory.toLocaleLowerCase().replace(" ", "-")} key={`${category}-${query}-${productCategory}`} aria-labelledby={`${productCategory}-heading`}>
+          <section className="catalogue-group" id={productCategory.toLocaleLowerCase().replace(" ", "-")} key={`${category}-${query}-${productCategory}`} aria-labelledby={productCategory.replace(" ", "-") + "-heading"}>
             <div className="catalogue-group-heading">
-              <p className="eyebrow">{productCategory}</p>
-              <h2 id={`${productCategory}-heading`}>{categoryProducts.length} products</h2>
+              <h2 id={productCategory.replace(" ", "-") + "-heading"}>{productCategory}</h2>
+              <span>{categoryProducts.length} products</span>
             </div>
             <div className="product-grid">
               {categoryProducts.map((product) => <ProductCard key={product.slug} product={product} heroSrc={heroImages[product.slug]} />)}

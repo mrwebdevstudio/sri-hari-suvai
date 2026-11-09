@@ -25,7 +25,7 @@ export function productJsonLd(product: Product, imagePath?: string | null) {
       name: `${product.name} ${variant.weightGrams}g`,
       price: (variant.pricePaise / 100).toFixed(2),
       priceCurrency: "INR",
-      availability: "https://schema.org/InStock",
+      ...(variant.available === undefined ? {} : { availability: variant.available ? "https://schema.org/InStock" : "https://schema.org/OutOfStock" }),
       url: absoluteUrl("/products/" + product.slug),
     })),
   };

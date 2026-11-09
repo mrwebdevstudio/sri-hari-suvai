@@ -1,50 +1,25 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-
 import { ProductsExplorer } from "@/components/product/ProductsExplorer";
 import { buildHeroImageMap } from "@/lib/assets";
 import { getPublicCatalogue } from "@/lib/catalogue";
 
 export const metadata: Metadata = {
   title: "Products",
-  description: "Browse all 16 Sri Hari Suvai Instant Mix and Direct Mix products in four available weights.",
+  description: "Browse Sri Hari Suvai Instant Mix and Direct Mix products and choose your pack size.",
   alternates: { canonical: "/products" },
-  openGraph: {
-    title: "Products | Sri Hari Suvai",
-    description: "Browse all 16 Sri Hari Suvai Instant Mix and Direct Mix products.",
-    url: "/products",
-  },
 };
 
-export default async function ProductsPage() {
-  const catalogue = await getPublicCatalogue();
-  const heroImages = buildHeroImageMap(catalogue);
-
+export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
+  const [catalogue, params] = await Promise.all([getPublicCatalogue(), searchParams]);
+  const query = typeof params.q === "string" ? params.q : "";
   return (
     <div className="page-wrap">
-      <header className="page-hero page-hero--catalogue shell">
-        <div>
-          <p className="eyebrow">Product catalogue</p>
-          <h1>Every mix, ready to discover.</h1>
-        </div>
-        <div className="page-hero-aside">
-          <p>Explore 10 Instant Mix and 6 Direct Mix products, each available in four practical weights.</p>
-          <Link className="button" href="/shop">Shop all products</Link>
-        </div>
-      </header>
-
-      <section className="category-overview shell" aria-labelledby="category-overview-heading">
-        <h2 className="visually-hidden" id="category-overview-heading">Product categories</h2>
-        <a className="category-card" href="#instant-mix">
-          <span>01</span><p className="eyebrow">10 products</p><h3>Instant Mix</h3><p>Convenient mixes for preparing familiar South Indian dishes.</p>
-        </a>
-        <a className="category-card category-card--dark" href="#direct-mix">
-          <span>02</span><p className="eyebrow">6 products</p><h3>Direct Mix</h3><p>Versatile podis made to mix or serve with everyday favourites.</p>
-        </a>
-      </section>
-
-      <section className="section catalogue-section shell" aria-label="Complete product catalogue">
-        <ProductsExplorer products={catalogue} heroImages={heroImages} />
+      <header className="pantry-heading"><div className="store-shell">
+        <p className="eyebrow">Sri Hari Suvai</p><h1>Our spice pantry</h1>
+        <p>Explore the podis and mixes behind your favourite South Indian meals.</p>
+      </div></header>
+      <section className="section section--first shell" aria-label="Complete product catalogue">
+        <ProductsExplorer key={query} initialQuery={query} products={catalogue} heroImages={buildHeroImageMap(catalogue)} />
       </section>
     </div>
   );

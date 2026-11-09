@@ -23,6 +23,7 @@ export type CartItem = {
 };
 
 type CartContextValue = {
+  catalogueAvailable: boolean;
   items: readonly CartItem[];
   itemCount: number;
   subtotalPaise: number;
@@ -51,7 +52,7 @@ function isCartItem(value: unknown, getProduct: (slug: string) => Product | unde
   );
 }
 
-export function CartProvider({ children, catalogue = fallbackProducts }: { children: ReactNode; catalogue?: readonly Product[] }) {
+export function CartProvider({ children, catalogue = fallbackProducts, catalogueAvailable = true }: { children: ReactNode; catalogue?: readonly Product[]; catalogueAvailable?: boolean }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -59,6 +60,7 @@ export function CartProvider({ children, catalogue = fallbackProducts }: { child
   const getProduct = useCallback((slug: string) => catalogueBySlug.get(slug), [catalogueBySlug]);
 
   useEffect(() => {
+    if (!catalogueAvailable) return;
     let storedItems: CartItem[] = [];
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -71,24 +73,26 @@ export function CartProvider({ children, catalogue = fallbackProducts }: { child
       setItems(storedItems);
       setHydrated(true);
     });
-  }, [getProduct]);
+  }, [getProduct, catalogueAvailable]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !catalogueAvailable) return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [hydrated, items]);
+  }, [hydrated, items, catalogueAvailable]);
 
   const addItem = useCallback((productSlug: string, weightGrams: number) => {
+    const variant = getProduct(productSlug)?.variants.find((entry) => entry.weightGrams === weightGrams);
+    if (!catalogueAvailable || !variant || variant.available === false) return;
     setItems((current) => {
       const existing = current.find(
         (item) => item.productSlug === productSlug && item.weightGrams === weightGrams,
       );
       if (!existing) return [...current, { productSlug, weightGrams, quantity: 1 }];
       return current.map((item) =>
-        item === existing ? { ...item, quantity: item.quantity + 1 } : item,
+        item === existing ? { ...item, quantity: Math.min(99, item.quantity + 1) } : item,
       );
     });
-  }, []);
+  }, [getProduct, catalogueAvailable]);
 
   const removeItem = useCallback((productSlug: string, weightGrams: number) => {
     setItems((current) =>
@@ -100,6 +104,7 @@ export function CartProvider({ children, catalogue = fallbackProducts }: { child
   const clearCart = useCallback(() => setItems([]), []);
 
   const updateQuantity = useCallback((productSlug: string, weightGrams: number, quantity: number) => {
+    if (!Number.isInteger(quantity)) return;
     if (quantity <= 0) {
       removeItem(productSlug, weightGrams);
       return;
@@ -107,7 +112,7 @@ export function CartProvider({ children, catalogue = fallbackProducts }: { child
     setItems((current) =>
       current.map((item) =>
         item.productSlug === productSlug && item.weightGrams === weightGrams
-          ? { ...item, quantity }
+          ? { ...item, quantity: Math.min(99, quantity) }
           : item,
       ),
     );
@@ -131,6 +136,7 @@ export function CartProvider({ children, catalogue = fallbackProducts }: { child
 
   const value = useMemo<CartContextValue>(
     () => ({
+      catalogueAvailable,
       items,
       ...totals,
       addItem,
@@ -141,7 +147,7 @@ export function CartProvider({ children, catalogue = fallbackProducts }: { child
       closeCart,
       getProduct,
     }),
-    [addItem, clearCart, closeCart, getProduct, items, openCart, removeItem, totals, updateQuantity],
+    [addItem, clearCart, closeCart, getProduct, items, openCart, removeItem, totals, updateQuantity, catalogueAvailable],
   );
 
   return (
@@ -172,8 +178,7 @@ export function CartButton({ className = "" }: { className?: string }) {
         <circle cx="10" cy="20" r="1" />
         <circle cx="18" cy="20" r="1" />
       </svg>
-      <span>Cart</span>
-      {itemCount ? <span className="cart-badge" key={itemCount} aria-hidden="true">{itemCount}</span> : null}
+      <span className="cart-badge" key={itemCount} aria-hidden="true">{itemCount}</span>
     </button>
   );
 }

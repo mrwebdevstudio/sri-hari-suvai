@@ -13,6 +13,12 @@ export function resolveHeroPng(slug: string): string | null {
   return existsSync(filePath) ? publicPath : null;
 }
 
+export function resolvePackIllustration(slug: string): string | null {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return null;
+  const src = "/images/storefront/packs/" + slug + ".webp";
+  return existsSync(path.join(process.cwd(), "public", src)) ? src : null;
+}
+
 export function buildHeroImageMap(items: readonly Pick<Product, "slug" | "imagePath">[]): HeroImageMap {
   return Object.fromEntries(items.map((product) => [product.slug, product.imagePath || resolveHeroPng(product.slug)]));
 }

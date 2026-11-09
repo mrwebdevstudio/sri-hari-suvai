@@ -5,6 +5,7 @@ export type ProductCategory = (typeof productCategories)[number];
 export type ProductVariant = {
   weightGrams: number;
   pricePaise: number;
+  available?: boolean;
 };
 
 export type Product = {
