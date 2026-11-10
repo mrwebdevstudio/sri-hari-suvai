@@ -42,7 +42,7 @@ export function resolveAuthCallbackFlow(
   next: string | null | undefined,
   otpType?: string | null,
 ): AuthCallbackFlow {
-  if (otpType === "recovery" || safeAuthRedirectPath(next, "") === "/reset-password") return "recovery";
+  if (otpType === "recovery" || otpType === "invite" || safeAuthRedirectPath(next, "") === "/reset-password") return "recovery";
   return value === "recovery" ? "recovery" : "confirmation";
 }
 

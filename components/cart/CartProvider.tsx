@@ -52,10 +52,24 @@ function isCartItem(value: unknown, getProduct: (slug: string) => Product | unde
   );
 }
 
-export function CartProvider({ children, catalogue = fallbackProducts, catalogueAvailable = true }: { children: ReactNode; catalogue?: readonly Product[]; catalogueAvailable?: boolean }) {
+export function CartProvider({ children, owner, catalogue = fallbackProducts, catalogueAvailable = true }: { children: ReactNode; owner?: string; catalogue?: readonly Product[]; catalogueAvailable?: boolean }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [syncFailed,setSyncFailed]=useState(false);
+  const pending=useRef(Promise.resolve());
+  const sync=useCallback((action:string, lines:CartItem[]=[], importId?:string)=>{
+    const operation=pending.current.then(async()=>{
+      const response=await fetch("/api/cart",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({owner,action,items:lines,importId}),cache:"no-store"});
+      if(!response.ok) throw new Error("Cart unavailable");
+      const result=await response.json();
+      setItems(result.items);
+      setSyncFailed(false);
+      setHydrated(true);
+    });
+    pending.current=operation.catch(()=>setSyncFailed(true));
+    return operation;
+  },[owner]);
   const catalogueBySlug = useMemo(() => new Map(catalogue.map((product) => [product.slug, product])), [catalogue]);
   const getProduct = useCallback((slug: string) => catalogueBySlug.get(slug), [catalogueBySlug]);
 
@@ -69,20 +83,35 @@ export function CartProvider({ children, catalogue = fallbackProducts, catalogue
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
     }
+    if (owner) {
+      const importKey=STORAGE_KEY+"-import";
+      if (storedItems.length) {
+        const token=window.localStorage.getItem(importKey) || crypto.randomUUID();
+        window.localStorage.setItem(importKey,token);
+        void sync("merge",storedItems,token).then(()=>{
+          if(window.localStorage.getItem(importKey)===token) {
+            window.localStorage.removeItem(STORAGE_KEY);
+            window.localStorage.removeItem(importKey);
+          }
+        }).catch(()=>{});
+      } else void sync("load").catch(()=>{});
+      return;
+    }
     queueMicrotask(() => {
       setItems(storedItems);
       setHydrated(true);
     });
-  }, [getProduct, catalogueAvailable]);
+  }, [getProduct, catalogueAvailable, owner, sync]);
 
   useEffect(() => {
-    if (!hydrated || !catalogueAvailable) return;
+    if (owner || !hydrated || !catalogueAvailable) return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [hydrated, items, catalogueAvailable]);
+  }, [hydrated, items, catalogueAvailable, owner]);
 
   const addItem = useCallback((productSlug: string, weightGrams: number) => {
     const variant = getProduct(productSlug)?.variants.find((entry) => entry.weightGrams === weightGrams);
     if (!catalogueAvailable || !variant || variant.available === false) return;
+    if(owner) { void sync("add",[{productSlug,weightGrams,quantity:1}]).catch(()=>{}); return; }
     setItems((current) => {
       const existing = current.find(
         (item) => item.productSlug === productSlug && item.weightGrams === weightGrams,
@@ -92,16 +121,20 @@ export function CartProvider({ children, catalogue = fallbackProducts, catalogue
         item === existing ? { ...item, quantity: Math.min(99, item.quantity + 1) } : item,
       );
     });
-  }, [getProduct, catalogueAvailable]);
+  }, [getProduct, catalogueAvailable,owner,sync]);
 
   const removeItem = useCallback((productSlug: string, weightGrams: number) => {
+    if(owner) { void sync("remove",[{productSlug,weightGrams,quantity:1}]).catch(()=>{}); return; }
     setItems((current) =>
       current.filter(
         (item) => !(item.productSlug === productSlug && item.weightGrams === weightGrams),
       ),
     );
-  }, []);
-  const clearCart = useCallback(() => setItems([]), []);
+  }, [owner,sync]);
+  const clearCart = useCallback(() => {
+    if(owner) void sync("clear").catch(()=>{});
+    else setItems([]);
+  }, [owner,sync]);
 
   const updateQuantity = useCallback((productSlug: string, weightGrams: number, quantity: number) => {
     if (!Number.isInteger(quantity)) return;
@@ -109,6 +142,7 @@ export function CartProvider({ children, catalogue = fallbackProducts, catalogue
       removeItem(productSlug, weightGrams);
       return;
     }
+    if(owner) { void sync("set",[{productSlug,weightGrams,quantity:Math.min(99,quantity)}]).catch(()=>{}); return; }
     setItems((current) =>
       current.map((item) =>
         item.productSlug === productSlug && item.weightGrams === weightGrams
@@ -116,7 +150,7 @@ export function CartProvider({ children, catalogue = fallbackProducts, catalogue
           : item,
       ),
     );
-  }, [removeItem]);
+  }, [removeItem,owner,sync]);
 
   const openCart = useCallback(() => setDrawerOpen(true), []);
   const closeCart = useCallback(() => setDrawerOpen(false), []);
@@ -152,6 +186,7 @@ export function CartProvider({ children, catalogue = fallbackProducts, catalogue
 
   return (
     <CartContext.Provider value={value}>
+      {syncFailed && <p role="alert">Your cart could not be synced. Reload to retrieve the saved cart.</p>}
       {children}
       {drawerOpen ? <CartDrawer /> : null}
     </CartContext.Provider>

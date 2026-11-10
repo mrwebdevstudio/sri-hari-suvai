@@ -16,7 +16,9 @@ export default async function HomePage() {
   const picks = ordered.flatMap(product => {
     const pack = product.variants.find(variant => variant.available !== false);
     if (!pack) return [];
-    const matchesLabel = images[product.slug] === "/images/products/" + product.slug + ".png" &&
+    const originalPhoto = images[product.slug] === "/images/products/" + product.slug + ".png" ||
+      /\/00000000-0000-8000-8000-[a-f0-9]{12}\.png$/.test(images[product.slug] ?? "");
+    const matchesLabel = originalPhoto &&
       illustratedProducts.some(item => item.slug === product.slug && item.name === product.name && item.category === product.category);
     const packArt = matchesLabel ? resolvePackIllustration(product.slug) : null;
     return [{ slug: product.slug, name: product.name, category: product.category, image: packArt ?? images[product.slug], illustrated: Boolean(packArt), weight: pack.weightGrams, price: pack.pricePaise }];

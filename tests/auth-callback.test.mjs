@@ -6,9 +6,17 @@ import {
   AUTH_MESSAGES,
   getAuthCallbackRedirect,
   getPasswordUpdateRedirect,
+  resolveAuthCallbackFlow,
   safeAuthRedirectPath,
   sanitizeAuthDisplayText,
 } from "../lib/auth-flow.ts";
+
+test("a verified invitation opens the existing private password-setting form", () => {
+  const flow = resolveAuthCallbackFlow(null, null, "invite");
+  assert.equal(new URL(getAuthCallbackRedirect(flow, true, null), "https://auth.local").pathname, "/reset-password");
+  assert.equal(resolveAuthCallbackFlow(null, null, "email"), "confirmation");
+  assert.match(getAuthCallbackRedirect(flow, false, null), /^\/login\?error=/);
+});
 
 test("valid confirmation reaches a success state instead of a false expired-link error", () => {
   const redirect = getAuthCallbackRedirect("confirmation", true, "/account");

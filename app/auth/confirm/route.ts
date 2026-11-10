@@ -5,7 +5,7 @@ import { getAuthCallbackRedirect, resolveAuthCallbackFlow } from "@/lib/auth-flo
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function supportedOtpType(value: string | null): EmailOtpType | null {
-  return value === "email" || value === "recovery" ? value : null;
+  return value === "email" || value === "recovery" || value === "invite" ? value : null;
 }
 
 function redirectWithoutAuthState(request: NextRequest, path: string) {

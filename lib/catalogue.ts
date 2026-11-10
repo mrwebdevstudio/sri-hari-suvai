@@ -14,18 +14,20 @@ type CatalogueRow = {
   usage: string;
   image_alt: string;
   image_path: string | null;
-  product_variants: { weight_grams: number; price_paise: number; active: boolean; track_inventory: boolean; stock_quantity: number | null }[];
+  product_images: { object_name: string } | null;
+  product_variants: { weight_grams: number; price_paise: number; active: boolean; track_inventory: boolean; stock_quantity: number | null; reserved_quantity: number }[];
 };
 
 async function loadCatalogue(): Promise<readonly Product[]> {
   const supabase = createPublicSupabaseClient();
   const { data, error } = await supabase
     .from("products")
-    .select("slug, name, category, summary, usage, image_alt, image_path, product_variants(weight_grams, price_paise, active, track_inventory, stock_quantity)")
+    .select("slug, name, category, summary, usage, image_alt, image_path, product_images(object_name), product_variants(weight_grams, price_paise, active, track_inventory, stock_quantity, reserved_quantity)")
     .eq("active", true)
     .eq("product_variants.active", true)
     .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .overrideTypes<CatalogueRow[], { merge: false }>();
   if (error) throw error;
   return ((data || []) as CatalogueRow[]).map((row) => ({
     slug: row.slug,
@@ -34,16 +36,16 @@ async function loadCatalogue(): Promise<readonly Product[]> {
     summary: row.summary,
     usage: row.usage,
     imageAlt: row.image_alt,
-    imagePath: row.image_path,
+    imagePath: row.product_images ? "/api/product-images/" + row.product_images.object_name : row.image_path,
     variants: (row.product_variants || [])
       .filter((variant) => variant.active)
       .sort((a, b) => a.weight_grams - b.weight_grams)
       .map((variant) => ({ weightGrams: variant.weight_grams, pricePaise: variant.price_paise,
-        available: variant.track_inventory ? (variant.stock_quantity ?? 0) > 0 : true })),
+        available: variant.track_inventory ? (variant.stock_quantity ?? 0) > variant.reserved_quantity : true })),
   })).filter((product) => product.variants.length > 0);
 }
 
-const getCachedCatalogue = unstable_cache(loadCatalogue, ["public-catalogue-v2"], {
+const getCachedCatalogue = unstable_cache(loadCatalogue, ["public-catalogue-v3", process.env.NEXT_PUBLIC_SUPABASE_URL ?? "unconfigured"], {
   revalidate: 300,
   tags: ["catalogue"],
 });

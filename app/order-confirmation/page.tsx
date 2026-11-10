@@ -17,18 +17,17 @@ export default async function OrderConfirmationPage({ searchParams }: { searchPa
   if (/^SHS-\d{8}-[A-Z2-9]{6}$/.test(orderNumber)) {
     try {
       const receipt = (await cookies()).get(ORDER_RECEIPT_COOKIE)?.value || "";
-      if (verifyOrderReceipt(receipt, orderNumber, process.env.RAZORPAY_KEY_SECRET?.trim() || "")) {
+      const user = await getOptionalUser();
+      if (user) {
+        const supabase = await createServerSupabaseClient();
+        const { data } = await supabase.from("orders").select("order_number, payment_status")
+          .eq("order_number", orderNumber).eq("user_id", user.id).maybeSingle();
+        verifiedOrder = data;
+      }
+      if (!verifiedOrder && verifyOrderReceipt(receipt, orderNumber, process.env.RAZORPAY_KEY_SECRET?.trim() || "")) {
         const { data, error } = await createAdminSupabaseClient().from("orders")
           .select("order_number, payment_status").eq("order_number", orderNumber).maybeSingle();
         if (!error) verifiedOrder = data;
-      } else {
-        const user = await getOptionalUser();
-        if (user) {
-          const supabase = await createServerSupabaseClient();
-          const { data, error } = await supabase.from("orders").select("order_number, payment_status")
-            .eq("order_number", orderNumber).eq("user_id", user.id).maybeSingle();
-          if (!error) verifiedOrder = data;
-        }
       }
     } catch { /* Never infer payment success when verification is unavailable. */ }
   }

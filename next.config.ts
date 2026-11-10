@@ -1,5 +1,12 @@
 import type { NextConfig } from "next";
 
+const serverKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+for (const [name, value] of Object.entries(process.env)) {
+  if (name.startsWith("NEXT_PUBLIC_") && value && (value.includes("sb_secret_") || (serverKey && value.includes(serverKey)))) {
+    throw new Error("A public environment variable contains a server credential. Remove it before starting or building.");
+  }
+}
+
 function configuredOrigin(value: string | undefined): string | null {
   try { return value ? new URL(value).origin : null; } catch { return null; }
 }
@@ -32,6 +39,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   images: {
     formats: ["image/avif", "image/webp"],
   },

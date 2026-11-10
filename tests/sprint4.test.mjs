@@ -34,6 +34,7 @@ test("the environment contract is complete and keeps privileged values server-on
     "EMAIL_WEBHOOK_URL",
     "EMAIL_WEBHOOK_SECRET",
     "APP_VERSION",
+    "COMMERCE_ENVIRONMENT",
   ];
   const declared = readFileSync(".env.example", "utf8")
     .split(/\r?\n/)
@@ -65,6 +66,19 @@ test("commerce migrations retain the required chronological order", () => {
     "20260710230000_sprint_3_operations.sql",
     "20260805090000_sprint_4_validation_hardening.sql",
     "20260929100200_sprint_1_payment_event_safety.sql",
+    "20261110161708_dedicated_dev_backend.sql",
+    "20261110161939_product_media.sql",
+    "20261110161942_customer_cart.sql",
+    "20261110161945_inventory_holds.sql",
+    "20261110161948_order_outbox.sql",
+    "20261110163310_guarded_store_settings.sql",
+    "20261110163636_catalogue_read_policies.sql",
+    "20261110164041_admin_media_staging.sql",
+    "20261110164119_validate_staged_object_owner.sql",
+    "20261110164950_atomic_checkout_rules.sql",
+    "20261110171021_staff_product_image_reads.sql",
+    "20261110173321_single_store_administrator.sql",
+    "20261110173820_complete_owner_password_setup.sql",
   ]);
 });
 

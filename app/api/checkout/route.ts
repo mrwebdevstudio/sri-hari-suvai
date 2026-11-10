@@ -9,7 +9,7 @@ import { logger } from "@/lib/logger";
 import { calculateShippingPaise, generateOrderNumber } from "@/lib/orders";
 import { rateLimitRequest } from "@/lib/rate-limit";
 import { createRazorpayOrder, getRazorpayKeyId } from "@/lib/razorpay";
-import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient, hasSupabaseServerKey } from "@/lib/supabase/admin";
 import { parseCheckoutInput } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
 
   try {
     const input = parsed.data;
+  if (!hasSupabaseServerKey()) return NextResponse.json({error:"Online checkout is not configured."},{status:503});
     const admin = createAdminSupabaseClient();
     const user = await getOptionalUser();
     const { data: settings } = await admin.from("store_settings").select("checkout_enabled, guest_checkout_enabled, product_ordering_enabled, flat_shipping_paise, free_shipping_threshold_paise, serviceable_postal_codes").eq("settings_key", "default").single();
@@ -90,9 +91,12 @@ export async function POST(request: Request) {
           p_subtotal_paise: subtotalPaise,
           p_shipping_paise: shippingPaise,
           p_idempotency_key: input.idempotencyKey,
-          p_items: snapshots,
+          p_items: [...snapshots].sort((a,b)=>String(a.product_variant_id).localeCompare(String(b.product_variant_id))),
         });
         if (!error) createdId = data;
+        else if (error.code === "SH003") return NextResponse.json({error:"Online checkout is unavailable."},{status:503});
+        else if (error.code === "SH004") return NextResponse.json({error:"Delivery or totals changed. Review checkout."},{status:409});
+        else if (["SH001","SH002","P0002"].includes(error.code)) return NextResponse.json({error:"Pack availability or price changed. Review your cart."},{status:409});
         else if (error.message.toLowerCase().includes("idempotency")) {
           const { data: concurrent, error: concurrentError } = await admin.from("orders").select(retryOrderFields).eq("idempotency_key", input.idempotencyKey).single();
           if (concurrentError) throw concurrentError;

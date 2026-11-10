@@ -55,7 +55,7 @@ export const products: readonly Product[] = [
   },
   {
     slug: "vendhya-kuzhambu-podi",
-    name: "Vendhya Kuzhambu Podi",
+    name: "Vendhya Kuahambu Podi",
     category: "Instant Mix",
     summary: "A convenient podi for preparing vendhya kuzhambu.",
     usage: "Use to prepare vendhya kuzhambu.",

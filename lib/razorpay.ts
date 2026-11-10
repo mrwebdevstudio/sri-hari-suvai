@@ -19,6 +19,7 @@ function getRazorpayCredentials() {
   const keyId = process.env.RAZORPAY_KEY_ID?.trim();
   const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
   if (!keyId || !keySecret) throw new Error("Razorpay is not configured.");
+  if (process.env.COMMERCE_ENVIRONMENT !== "production" && !keyId.startsWith("rzp_test_")) throw new Error("Development checkout requires Razorpay test credentials.");
   return { keyId, keySecret };
 }
 

@@ -2,6 +2,7 @@
 
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomUUID } from "node:crypto";
 
 import {
   isKnownOrderStatus,
@@ -16,6 +17,7 @@ import { sendOrderEmailEvent, type OrderEmailEvent } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isValidPhone, normalizePhone } from "@/lib/validation";
 
 function value(formData: FormData, key: string, maximum = 500): string {
@@ -39,6 +41,50 @@ async function adminContext(path: string) {
 function mutationFailure(path: string, event: string, error: unknown): never {
   logger.error(event, { error });
   redirect(withMessage(path, "error", "The update could not be saved. Review the values and try again."));
+}
+
+export async function createProductAction(form: FormData) {
+  const path = "/admin/products";
+  const {admin,user} = await adminContext(path);
+  const prices = [100,250,500,1000].map(weight => parseRupeesToPaise(form.get("price"+weight)));
+  if (prices.some(price => price === null || price <= 0)) redirect(withMessage(path,"error","Enter a positive price for each pack."));
+  const {data,error} = await admin.rpc("admin_create_product",{p_actor:user.id,p_slug:value(form,"slug",100),p_name:value(form,"name",150),p_category:value(form,"category",30),p_prices:prices});
+  if (error) mutationFailure(path,"admin.product_create_failed",error);
+  updateTag("catalogue");
+  redirect("/admin/products/"+data);
+}
+
+export async function changeProductImageAction(form: FormData) {
+  const id=value(form,"id",36);
+  if (!/^[0-9a-f-]{36}$/.test(id)) redirect("/admin/products");
+  const path="/admin/products/"+id;
+  const {admin,user}=await adminContext(path);
+  const bucket=admin.storage.from("product-images");
+  let objectName: string | null=null;
+  if(form.get("operation")!=="remove") {
+    const file=form.get("image");
+    if (!(file instanceof File) || !file.size || file.size>4*1024*1024) redirect(withMessage(path,"error","Choose a PNG, JPEG or WebP under 4 MB."));
+    const bytes=Buffer.from(await file.arrayBuffer());
+    const ext = file.type==="image/png" && bytes.subarray(0,8).toString("hex")==="89504e470d0a1a0a" ? "png"
+      : file.type==="image/jpeg" && bytes.subarray(0,3).toString("hex")==="ffd8ff" ? "jpg"
+      : file.type==="image/webp" && bytes.toString("ascii",0,4)==="RIFF" && bytes.toString("ascii",8,12)==="WEBP" ? "webp" : null;
+    if(!ext) redirect(withMessage(path,"error","The file contents do not match a supported image type."));
+    objectName=id+"/"+randomUUID()+"."+ext;
+    const session=await createServerSupabaseClient();
+    const {error}=await session.storage.from("product-images").upload(objectName,bytes,{contentType:file.type,cacheControl:"60",upsert:false});
+    if(error) mutationFailure(path,"admin.media_upload_failed",error);
+  }
+  const {data:previous,error}=await admin.rpc("admin_set_product_image",{p_actor:user.id,p_product:id,p_object:objectName});
+  if(error) {
+    // A transport failure can mask a committed swap. Never delete the new object on an ambiguous result.
+    mutationFailure(path,"admin.media_publish_failed",error);
+  }
+  if(previous && previous!==objectName) {
+    const {error:cleanup}=await bucket.remove([previous]);
+    if(cleanup) logger.warn("admin.media_cleanup_pending",{productId:id});
+  }
+  updateTag("catalogue");
+  redirect(withMessage(path,"message","Product image updated."));
 }
 
 export async function updateProductAction(formData: FormData) {

@@ -15,7 +15,7 @@ export async function GET() {
   if (!(await getAdminUser())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const admin = createAdminSupabaseClient();
   const { data, error } = await admin.from("store_settings").select("*").eq("settings_key", "default").single();
-  return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ settings: data });
+  return error ? NextResponse.json({ error: "Could not load store settings." }, { status: 500 }) : NextResponse.json({ settings: data });
 }
 
 export async function PATCH(request: Request) {
@@ -42,7 +42,6 @@ export async function PATCH(request: Request) {
     const effectiveFlat = Object.hasOwn(updates, "flat_shipping_paise") ? updates.flat_shipping_paise : current?.flat_shipping_paise;
     if (effectiveFlat === null || effectiveFlat === undefined) return NextResponse.json({ error: "Configure flat shipping before enabling checkout." }, { status: 400 });
   }
-  const { data, error } = await admin.from("store_settings").update(updates).eq("settings_key", "default").select().single();
-  if (!error) await admin.rpc("write_audit_log", { p_actor_user_id: adminUser.id, p_event_type: "store_settings.updated", p_entity_type: "store_settings", p_entity_id: "default", p_summary: "Store settings updated through the admin API.", p_metadata: { changed: Object.keys(updates) }, p_correlation_id: null });
-  return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ settings: data });
+  const { data, error } = await admin.rpc("admin_patch_settings",{p_actor:adminUser.id,p_patch:updates});
+  return error ? NextResponse.json({ error: "Settings could not be saved. Check shipping and policy approval." }, { status: 400 }) : NextResponse.json({ settings: data });
 }

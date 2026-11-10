@@ -1,5 +1,22 @@
+import { cache } from "react";
+import { notFound } from "next/navigation";
+import { getAdminUser } from "@/lib/auth";
 import { calculateVerifiedRevenue } from "@/lib/admin";
-import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createAdminSupabaseClient, hasSupabaseServerKey } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+// App Router may start a page before its enclosing layout finishes authorization.
+const checkStaffRead = cache(async () => {
+  if (!await getAdminUser()) notFound();
+});
+const staffSessionClient = cache(async () => {
+  await checkStaffRead();
+  return createServerSupabaseClient();
+});
+const adminReadClient = cache(async () => {
+  await checkStaffRead();
+  return createAdminSupabaseClient();
+});
 
 export const ADMIN_PAGE_SIZE = 25;
 
@@ -17,7 +34,8 @@ function safeSearch(value = ""): string {
 }
 
 export async function getDashboardData() {
-  const admin = createAdminSupabaseClient();
+  const admin = await staffSessionClient();
+  const settingsClient = await adminReadClient();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -39,7 +57,7 @@ export async function getDashboardData() {
     admin.from("product_variants").select("id, weight_grams, stock_quantity, products(name), updated_at").eq("track_inventory", true).order("stock_quantity", { ascending: true }).limit(10),
     admin.from("products").select("id", { count: "exact", head: true }).eq("active", false),
     admin.from("product_variants").select("id", { count: "exact", head: true }).eq("active", false),
-    admin.from("store_settings").select("checkout_enabled, flat_shipping_paise, low_stock_threshold").eq("settings_key", "default").single(),
+    settingsClient.from("store_settings").select("checkout_enabled, flat_shipping_paise, low_stock_threshold").eq("settings_key", "default").single(),
   ]);
   const revenue = calculateVerifiedRevenue(paidOrders.data || []);
   const threshold = settings.data?.low_stock_threshold;
@@ -62,14 +80,14 @@ export async function getDashboardData() {
     inactiveCount: (inactiveProducts.count || 0) + (inactiveVariants.count || 0),
     settings: settings.data,
     configuration: {
-      supabase: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY),
+      supabase: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && hasSupabaseServerKey()),
       razorpay: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_WEBHOOK_SECRET),
     },
   };
 }
 
 export async function getAdminOrders(filters: AdminOrderFilters) {
-  const admin = createAdminSupabaseClient();
+  const admin = await staffSessionClient();
   const page = Math.max(1, Number.isInteger(filters.page) ? Number(filters.page) : 1);
   const fromRow = (page - 1) * ADMIN_PAGE_SIZE;
   let query = admin
@@ -87,7 +105,7 @@ export async function getAdminOrders(filters: AdminOrderFilters) {
 }
 
 export async function getAdminOrder(orderNumber: string) {
-  const admin = createAdminSupabaseClient();
+  const admin = await adminReadClient();
   const { data, error } = await admin
     .from("orders")
     .select("*, order_items(*), order_status_history(*), payment_events(id, event_type, provider_event_id, provider_payment_id, resulting_status, amount_paise, currency, signature_verified, capture_status, provider_refund_id, created_at)")
@@ -100,24 +118,25 @@ export async function getAdminOrder(orderNumber: string) {
 }
 
 export async function getAdminProducts() {
-  const admin = createAdminSupabaseClient();
-  const { data, error } = await admin.from("products").select("*, product_variants(*)").order("sort_order").order("name");
+  const admin = await staffSessionClient();
+  const { data, error } = await admin.from("products").select("*, product_variants(*), product_images(object_name)").order("sort_order").order("name");
   if (error) throw error;
   return data || [];
 }
 
 export async function getAdminProduct(id: string) {
-  const admin = createAdminSupabaseClient();
-  const { data, error } = await admin.from("products").select("*, product_variants(*)").eq("id", id).maybeSingle();
+  const admin = await staffSessionClient();
+  const { data, error } = await admin.from("products").select("*, product_variants(*), product_images(object_name)").eq("id", id).maybeSingle();
   if (error) throw error;
   return data;
 }
 
 export async function getInventoryData() {
-  const admin = createAdminSupabaseClient();
+  const admin = await staffSessionClient();
+  const settingsClient = await adminReadClient();
   const [{ data: variants, error }, { data: settings }, { data: adjustments }] = await Promise.all([
     admin.from("product_variants").select("*, products(name, slug)").eq("track_inventory", true).order("stock_quantity"),
-    admin.from("store_settings").select("low_stock_threshold").eq("settings_key", "default").single(),
+    settingsClient.from("store_settings").select("low_stock_threshold").eq("settings_key", "default").single(),
     admin.from("inventory_adjustments").select("id, product_variant_id, adjustment_delta, before_quantity, after_quantity, reason, created_at").order("created_at", { ascending: false }).limit(25),
   ]);
   if (error) throw error;
@@ -125,14 +144,14 @@ export async function getInventoryData() {
 }
 
 export async function getAdminSettings() {
-  const admin = createAdminSupabaseClient();
+  const admin = await adminReadClient();
   const { data, error } = await admin.from("store_settings").select("*").eq("settings_key", "default").single();
   if (error) throw error;
   return data;
 }
 
 export async function getAnalyticsData(from: string, to: string) {
-  const admin = createAdminSupabaseClient();
+  const admin = await staffSessionClient();
   const [{ data: orders, error }, { data: items }] = await Promise.all([
     admin.from("orders").select("id, user_id, payment_status, status, grand_total_paise, shipping_paise, refunded_paise, created_at").gte("created_at", from).lte("created_at", to).order("created_at").limit(5000),
     admin.from("order_items").select("order_id, product_name, variant_name, quantity, line_total_paise, orders!inner(payment_status, created_at)").gte("orders.created_at", from).lte("orders.created_at", to).in("orders.payment_status", ["paid", "refunded"]).limit(10000),
@@ -180,7 +199,7 @@ export async function getAnalyticsData(from: string, to: string) {
 }
 
 export async function getAuditLogs(filters: { event?: string; actor?: string; entity?: string; from?: string; to?: string; page?: number }) {
-  const admin = createAdminSupabaseClient();
+  const admin = await staffSessionClient();
   const page = Math.max(1, Number(filters.page) || 1);
   const start = (page - 1) * ADMIN_PAGE_SIZE;
   let query = admin.from("audit_logs").select("id, actor_user_id, actor_role, event_type, entity_type, entity_id, summary, metadata, correlation_id, created_at", { count: "exact" });

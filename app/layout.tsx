@@ -8,6 +8,7 @@ import { CartProvider } from "@/components/cart/CartProvider";
 import { JsonLd } from "@/components/ui/JsonLd";
 import { websiteJsonLd } from "@/lib/jsonld";
 import { getPublicCatalogueState } from "@/lib/catalogue";
+import { getOptionalUser } from "@/lib/auth";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
 import { getPublicStoreSettings } from "@/lib/store";
@@ -59,7 +60,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [catalogue, settings] = await Promise.all([getPublicCatalogueState(), getPublicStoreSettings()]);
+  const [catalogue, settings, user] = await Promise.all([getPublicCatalogueState(), getPublicStoreSettings(), getOptionalUser()]);
   const threshold = settings.freeShippingThresholdPaise;
   const shipping = settings.checkoutEnabled && threshold !== null && threshold > 0 ? "Free shipping on orders from " + formatPrice(threshold) : undefined;
   return (
@@ -70,7 +71,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     >
       <body>
         <a className="skip-link" href="#main-content">Skip to content</a>
-        <CartProvider catalogue={catalogue.products} catalogueAvailable={catalogue.available}>
+        <CartProvider key={user?.id ?? "guest"} owner={user?.id} catalogue={catalogue.products} catalogueAvailable={catalogue.available}>
           <SiteHeader shipping={shipping} />
           <main id="main-content">{!catalogue.available ? <div className="catalogue-notice shell" role="status"><p className="form-message">Our catalogue is temporarily unavailable. Please try again shortly. Your saved cart has been kept.</p></div> : null}{children}</main>
           <SiteFooter />

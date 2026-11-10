@@ -2,7 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { updateProductAction, updateVariantAction } from "@/app/admin/actions";
+import { changeProductImageAction, updateProductAction, updateVariantAction } from "@/app/admin/actions";
+import { resolveHeroPng } from "@/lib/assets";
 import { AdminNotice, AdminPageHeader, StatusBadge } from "@/components/admin/AdminUi";
 import { formatPaiseAsRupees } from "@/lib/admin";
 import { getAdminProduct } from "@/lib/admin-data";
@@ -20,7 +21,14 @@ export default async function AdminProductDetailPage({ params, searchParams }: {
       <AdminPageHeader eyebrow="Product management" title={product.name} description={product.slug} actions={<Link href="/admin/products">Back to products</Link>} />
       <AdminNotice message={query.message} error={query.error} />
       <div className="admin-product-edit-grid">
-        <aside className="admin-product-preview"><Image src={product.image_path || `/images/products/${product.slug}.png`} alt={product.image_alt || product.name} width={360} height={450} sizes="(max-width: 800px) 100vw, 320px" /><StatusBadge value={product.active ? "active" : "inactive"} /></aside>
+        <aside className="admin-product-preview">{(product.product_images || product.image_path || resolveHeroPng(product.slug)) && <Image src={product.product_images ? "/api/admin/product-images/"+product.id : product.image_path || `/images/products/${product.slug}.png`} unoptimized={Boolean(product.product_images)} alt={product.image_alt || product.name} width={360} height={450} sizes="(max-width: 800px) 100vw, 320px" />}<StatusBadge value={product.active ? "active" : "inactive"} />
+          <form className="admin-form" action={changeProductImageAction}>
+            <input type="hidden" name="id" value={product.id} />
+            <label>Product image (up to 4 MB)<input type="file" name="image" accept="image/png,image/jpeg,image/webp" required /></label>
+            <button type="submit" className="button">Upload image</button>
+            {product.product_images && <button type="submit" name="operation" value="remove" formNoValidate>Remove uploaded image</button>}
+          </form>
+        </aside>
         <section className="admin-section">
           <div className="admin-section-head"><div><p className="eyebrow">Verified content</p><h2>Product details</h2></div></div>
           <form className="admin-form" action={updateProductAction}>
