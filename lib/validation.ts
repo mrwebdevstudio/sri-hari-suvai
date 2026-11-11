@@ -9,6 +9,7 @@ export type AddressInput = {
 };
 
 export type CheckoutCartItemInput = {
+  expectedUnitPricePaise?: number;
   productSlug: string;
   weightGrams: number;
   quantity: number;
@@ -88,7 +89,8 @@ export function parseCheckoutInput(value: unknown): { data?: CheckoutInput; erro
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
       return { error: "Cart quantities must be between 1 and 99." };
     }
-    items.push({ productSlug, weightGrams, quantity });
+    if (item.expectedUnitPricePaise !== undefined && (!Number.isSafeInteger(item.expectedUnitPricePaise) || Number(item.expectedUnitPricePaise) < 0)) return { error: "Invalid item price." };
+    items.push({ productSlug, weightGrams, quantity, ...(item.expectedUnitPricePaise !== undefined && { expectedUnitPricePaise: Number(item.expectedUnitPricePaise) }) });
   }
 
   return { data: { ...parsedAddress.data, email, note, idempotencyKey, items } };

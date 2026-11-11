@@ -18,7 +18,8 @@ test("order numbers use the required dated six-character format", () => {
 
 test("shipping uses configured integer paise and honors the free threshold", () => {
   assert.equal(calculateShippingPaise(49_999, 5_000, 50_000), 5_000);
-  assert.equal(calculateShippingPaise(50_000, 5_000, 50_000), 0);
+  assert.equal(calculateShippingPaise(50_000, 5_000, 50_000), 5_000);
+  assert.equal(calculateShippingPaise(50_001, 5_000, 50_000), 0);
   assert.equal(calculateShippingPaise(10_000, null, 50_000), null);
   assert.equal(calculateShippingPaise(10_000.5, 5_000, null), null);
 });

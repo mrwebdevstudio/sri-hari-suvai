@@ -1,4 +1,4 @@
-import { verifyHmacSignature } from "@/lib/orders";
+import { verifyHmacSignature } from "./orders.ts";
 
 type RazorpayOrder = {
   id: string;
@@ -34,23 +34,26 @@ export async function createRazorpayOrder(input: {
   customerPhone: string;
 }): Promise<RazorpayOrder & { keyId: string }> {
   const { keyId, keySecret } = getRazorpayCredentials();
-  const response = await fetch("https://api.razorpay.com/v1/orders", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      amount: input.amountPaise,
-      currency: "INR",
-      receipt: input.orderNumber,
-      notes: { email: input.customerEmail, phone: input.customerPhone },
-    }),
-    cache: "no-store",
+  const headers = { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`, "Content-Type": "application/json" };
+  const ordersUrl = "https://api.razorpay.com/v1/orders";
+  // Razorpay receipts are unique. Recover a possibly committed POST before trying again.
+  const lookup = await fetch(`${ordersUrl}?receipt=${encodeURIComponent(input.orderNumber)}&count=2`, {
+    headers, cache: "no-store", signal: AbortSignal.timeout(10_000),
   });
-  if (!response.ok) throw new Error(`Razorpay order creation failed (${response.status}).`);
-  const order = (await response.json()) as RazorpayOrder;
-  if (!order.id || order.amount !== input.amountPaise || order.currency !== "INR") {
+  if (!lookup.ok) throw new Error(`Razorpay receipt lookup failed (${lookup.status}).`);
+  const collection = await lookup.json() as { items: RazorpayOrder[] };
+  if (!Array.isArray(collection.items) || collection.items.length > 1) throw new Error("Ambiguous provider receipt.");
+  let order = collection.items[0];
+  if (!order) {
+    const response = await fetch(ordersUrl, {
+      method: "POST", headers, cache: "no-store", signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ amount: input.amountPaise, currency: "INR", receipt: input.orderNumber,
+        notes: { email: input.customerEmail, phone: input.customerPhone } }),
+    });
+    if (!response.ok) throw new Error(`Razorpay order creation failed (${response.status}).`);
+    order = await response.json() as RazorpayOrder;
+  }
+  if (!order.id || order.receipt !== input.orderNumber || order.amount !== input.amountPaise || order.currency !== "INR") {
     throw new Error("Razorpay returned an invalid order.");
   }
   return { ...order, keyId };
@@ -73,7 +76,7 @@ export async function fetchRazorpayPayment(paymentId: string): Promise<RazorpayP
   const { keyId, keySecret } = getRazorpayCredentials();
   const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
     headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}` },
-    cache: "no-store",
+    cache: "no-store", signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Razorpay payment lookup failed (${response.status}).`);
   return (await response.json()) as RazorpayPayment;

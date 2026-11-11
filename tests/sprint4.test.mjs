@@ -79,6 +79,9 @@ test("commerce migrations retain the required chronological order", () => {
     "20261110171021_staff_product_image_reads.sql",
     "20261110173321_single_store_administrator.sql",
     "20261110173820_complete_owner_password_setup.sql",
+    "20261111065542_checkout_pricing_controls.sql",
+    "20261111065545_manual_reservation_reconciliation.sql",
+    "20261111065712_checkout_admin_rpc_boundaries.sql",
   ]);
 });
 

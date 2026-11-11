@@ -8,18 +8,7 @@ test("payment SQL preserves refunds, deduplicates notifications and applies inve
   try {
     // Minimal Supabase identity fixtures. This test exercises PostgreSQL functions,
     // not hosted Auth, API configuration, or multi-session concurrency.
-    await db.exec(`
-      create role anon; create role authenticated; create role service_role;
-      create schema auth;
-      create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}',
-        raw_app_meta_data jsonb default '{}', email_confirmed_at timestamptz, deleted_at timestamptz, encrypted_password text);
-      create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
-      grant usage on schema auth to authenticated,anon;
-      create schema storage;
-      create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-      create table storage.objects(bucket_id text,name text);
-      alter table storage.objects enable row level security;
-    `);
+    await db.exec(readFileSync("tests/fixtures/supabase-bootstrap.sql","utf8"));
     for (const name of readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql")).sort()) {
       // gen_random_uuid is built into PostgreSQL; PGlite does not need pgcrypto.
       const sql = readFileSync(`supabase/migrations/${name}`, "utf8").replace("create extension if not exists pgcrypto;", "");
@@ -36,7 +25,7 @@ test("payment SQL preserves refunds, deduplicates notifications and applies inve
     assert.equal((await db.query("select reserved_quantity from public.product_variants where id=$1",[variant.id])).rows[0].reserved_quantity,1);
     const apply = async (event, status, payload = {}, payment = "pay_test") => {
       const result = await db.query("select public.apply_payment_event($1,$2,$3,$4,$5,$6::jsonb) as applied",
-        [order.id, event, `test.${status}`, status, payment, JSON.stringify({ amount: 10000, currency: "INR", signatureVerified: true, ...payload })]);
+        [order.id, event, `test.${status}`, status, payment, JSON.stringify({ amount: 10000, currency: "INR", captureStatus: "captured", signatureVerified: true, ...payload })]);
       return result.rows[0].applied;
     };
     const state = async () => (await db.query("select payment_status,refunded_paise from public.orders where id=$1", [order.id])).rows[0];
@@ -51,7 +40,9 @@ test("payment SQL preserves refunds, deduplicates notifications and applies inve
     assert.equal(await apply("late-failure", "failed"), false);
     assert.equal((await state()).payment_status, "paid");
 
+    await assert.rejects(apply("unsigned-failure", "failed", { signatureVerified:false }), /Unverified failure/);
     assert.equal(await apply("partial-refund", "refunded", { amount: 3000, refundId: "rf_one" }), true);
+    await assert.rejects(apply("conflicting-refund", "refunded", { amount: 4000, refundId: "rf_one" }), /Conflicting refund/);
     assert.equal(await apply("refund-repeated-with-new-event", "refunded", { amount: 3000, refundId: "rf_one" }), false);
     assert.deepEqual(await state(), { payment_status: "paid", refunded_paise: 3000 });
     assert.equal(await apply("capture-after-partial", "paid"), false);
@@ -69,5 +60,6 @@ test("payment SQL preserves refunds, deduplicates notifications and applies inve
     }
     await db.exec(readFileSync("tests/fixtures/single-store-admin.sql","utf8"));
     await db.exec(readFileSync("supabase/validation/dev_backend_acceptance.sql","utf8"));
+    await db.exec(readFileSync("tests/fixtures/sprint5-commerce.sql","utf8"));
   } finally { await db.close(); }
 });

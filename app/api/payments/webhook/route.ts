@@ -3,16 +3,13 @@ import { createHash } from "node:crypto";
 import { sendOrderEmailEvent } from "@/lib/email";
 import { noStoreJson } from "@/lib/http";
 import { logger } from "@/lib/logger";
+import { readRazorpayEvent } from "@/lib/razorpay-events";
 import { verifyHmacSignature } from "@/lib/orders";
 import { rateLimitRequest } from "@/lib/rate-limit";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 const NextResponse = { json: noStoreJson };
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
 
 export async function POST(request: Request) {
   const rate = rateLimitRequest(request, "razorpay-webhook", 300, 60_000);
@@ -25,37 +22,23 @@ export async function POST(request: Request) {
 
   let body: Record<string, unknown>;
   try { body = JSON.parse(rawBody) as Record<string, unknown>; } catch { return NextResponse.json({ error: "Invalid webhook payload." }, { status: 400 }); }
-  const eventType = typeof body.event === "string" ? body.event : "";
-  const payload = record(body.payload);
-  const payment = record(record(payload.payment).entity);
-  const providerOrder = record(record(payload.order).entity);
-  const refund = record(record(payload.refund).entity);
-
-  const targetStatus = eventType === "payment.captured" || eventType === "order.paid"
-    ? "paid"
-    : eventType === "payment.failed"
-      ? "failed"
-      : eventType === "refund.processed"
-        ? "refunded"
-        : null;
-  if (!targetStatus) return NextResponse.json({ received: true, handled: false });
-
-  const providerPaymentId = String(payment.id || refund.payment_id || "");
-  const providerOrderId = String(payment.order_id || providerOrder.id || "");
+  const event = readRazorpayEvent(body);
+  if (event.kind === "ignored") return NextResponse.json({ received: true, handled: false });
+  if (event.kind === "invalid") return NextResponse.json({ error: "Invalid payment event evidence." }, { status: 400 });
+  const { eventType, targetStatus, providerPaymentId, providerOrderId, eventAmount, eventCurrency, captureStatus, refundId } = event;
   const eventId = request.headers.get("x-razorpay-event-id") || createHash("sha256").update(rawBody).digest("hex");
 
   try {
     const admin = createAdminSupabaseClient();
     let query = admin.from("orders").select("id, order_number, email, grand_total_paise, payment_status");
     query = providerOrderId ? query.eq("razorpay_order_id", providerOrderId) : query.eq("razorpay_payment_id", providerPaymentId);
-    const { data: order } = await query.maybeSingle();
-    if (!order) return NextResponse.json({ received: true, handled: false });
-
-    const paidAmount = Number(payment.amount || providerOrder.amount_paid || 0);
-    if (targetStatus === "paid" && (paidAmount !== order.grand_total_paise || String(payment.currency || providerOrder.currency || "INR") !== "INR")) return NextResponse.json({ error: "Webhook amount mismatch." }, { status: 400 });
-    const eventAmount = targetStatus === "refunded" ? Number(refund.amount || 0) : paidAmount;
-    const eventCurrency = String(payment.currency || providerOrder.currency || refund.currency || "INR");
-    if (!Number.isSafeInteger(eventAmount) || eventAmount < 0 || eventCurrency !== "INR") return NextResponse.json({ error: "Webhook amount mismatch." }, { status: 400 });
+    const { data: order, error: lookupError } = await query.maybeSingle();
+    if (lookupError) throw lookupError;
+    // A refund may arrive before capture, or capture before the provider ID is saved.
+    if (!order) return NextResponse.json({ error: "Order correlation pending." }, { status: 503 });
+    if (targetStatus === "paid" && eventAmount !== order.grand_total_paise) {
+      return NextResponse.json({ error: "Webhook amount mismatch." }, { status: 400 });
+    }
 
     const { data: applied, error } = await admin.rpc("apply_payment_event", {
       p_order_id: order.id,
@@ -66,9 +49,9 @@ export async function POST(request: Request) {
       p_payload: {
         amount: eventAmount,
         currency: eventCurrency,
-        captureStatus: String(payment.status || providerOrder.status || ""),
+        captureStatus,
         signatureVerified: true,
-        refundId: String(refund.id || ""),
+        refundId,
       },
     });
     if (error) throw error;

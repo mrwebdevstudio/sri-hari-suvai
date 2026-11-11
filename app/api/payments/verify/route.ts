@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     if (!verifyRazorpayPayment({ providerOrderId: order.razorpay_order_id, providerPaymentId, signature })) return NextResponse.json({ error: "Payment signature is invalid." }, { status: 400 });
 
     const payment = await fetchRazorpayPayment(providerPaymentId);
-    if (payment.order_id !== order.razorpay_order_id || payment.amount !== order.grand_total_paise || payment.currency !== "INR") return NextResponse.json({ error: "Payment amount or order reference does not match." }, { status: 400 });
+    if (payment.id !== providerPaymentId || payment.order_id !== order.razorpay_order_id || payment.amount !== order.grand_total_paise || payment.currency !== "INR") return NextResponse.json({ error: "Payment amount or order reference does not match." }, { status: 400 });
     if (payment.status !== "captured") return NextResponse.json({ paymentStatus: "pending", orderNumber }, { status: 202 });
 
     const { data: applied, error } = await admin.rpc("apply_payment_event", {

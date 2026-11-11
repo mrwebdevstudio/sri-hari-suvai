@@ -24,24 +24,7 @@ export function generateOrderNumber(date = new Date(), entropy = randomBytes(6))
   return `SHS-${day}-${suffix}`;
 }
 
-export function calculateShippingPaise(
-  subtotalPaise: number,
-  flatShippingPaise: number | null,
-  freeShippingThresholdPaise: number | null,
-): number | null {
-  if (!Number.isInteger(subtotalPaise) || subtotalPaise < 0) return null;
-  if (
-    freeShippingThresholdPaise !== null &&
-    Number.isInteger(freeShippingThresholdPaise) &&
-    freeShippingThresholdPaise >= 0 &&
-    subtotalPaise >= freeShippingThresholdPaise
-  ) {
-    return 0;
-  }
-  return flatShippingPaise !== null && Number.isInteger(flatShippingPaise) && flatShippingPaise >= 0
-    ? flatShippingPaise
-    : null;
-}
+export { calculateShippingPaise } from "./checkout-pricing.ts";
 
 export function createHmacSignature(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("hex");

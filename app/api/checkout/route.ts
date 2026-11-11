@@ -6,7 +6,8 @@ import { sendOrderEmailEvent } from "@/lib/email";
 import { getOptionalUser } from "@/lib/auth";
 import { noStoreJson } from "@/lib/http";
 import { logger } from "@/lib/logger";
-import { calculateShippingPaise, generateOrderNumber } from "@/lib/orders";
+import { acceptsQuote, calculateCheckoutQuote, servesPostalCode } from "@/lib/checkout-pricing";
+import { generateOrderNumber } from "@/lib/orders";
 import { rateLimitRequest } from "@/lib/rate-limit";
 import { createRazorpayOrder, getRazorpayKeyId } from "@/lib/razorpay";
 import { createAdminSupabaseClient, hasSupabaseServerKey } from "@/lib/supabase/admin";
@@ -14,7 +15,7 @@ import { parseCheckoutInput } from "@/lib/validation";
 
 export const runtime = "nodejs";
 const NextResponse = { json: noStoreJson };
-const retryOrderFields = "id, order_number, user_id, email, phone, customer_name, customer_note, address_snapshot, subtotal_paise, shipping_paise, grand_total_paise, razorpay_order_id, payment_status, status, order_items(product_slug, weight_grams, quantity, unit_price_paise)";
+const retryOrderFields = "id, order_number, user_id, email, phone, customer_name, customer_note, address_snapshot, subtotal_paise, shipping_paise, tax_paise, discount_paise, grand_total_paise, razorpay_order_id, payment_status, status, inventory_reservations(released_at), order_items(product_slug, weight_grams, quantity, unit_price_paise)";
 
 export async function POST(request: Request) {
   const rate = rateLimitRequest(request, "checkout-create", 12, 60_000);
@@ -26,25 +27,29 @@ export async function POST(request: Request) {
 
   try {
     const input = parsed.data;
-  if (!hasSupabaseServerKey()) return NextResponse.json({error:"Online checkout is not configured."},{status:503});
+    if (!hasSupabaseServerKey()) return NextResponse.json({error:"Online checkout is not configured."},{status:503});
     const admin = createAdminSupabaseClient();
     const user = await getOptionalUser();
-    const { data: settings } = await admin.from("store_settings").select("checkout_enabled, guest_checkout_enabled, product_ordering_enabled, flat_shipping_paise, free_shipping_threshold_paise, serviceable_postal_codes").eq("settings_key", "default").single();
+    const { data: settings } = await admin.from("store_settings").select("checkout_enabled, guest_checkout_enabled, product_ordering_enabled, flat_shipping_paise, free_shipping_threshold_paise, shipping_coverage, serviceable_postal_codes, tax_mode, tax_rate_bps, tax_shipping, discount_mode, gstin, fssai_license_number").eq("settings_key", "default").single();
     if (!settings?.checkout_enabled || !settings.product_ordering_enabled || settings.flat_shipping_paise === null) {
       return NextResponse.json({ error: "Online checkout is disabled until shipping is configured." }, { status: 503 });
     }
+    if (process.env.COMMERCE_ENVIRONMENT === "production" && (!settings.gstin || !settings.fssai_license_number)) {
+      return NextResponse.json({ error: "Store registration approval is pending." }, { status: 503 });
+    }
     if (!user && !settings.guest_checkout_enabled) return NextResponse.json({ error: "Sign in before checking out." }, { status: 401 });
-    if (settings.serviceable_postal_codes?.length && !settings.serviceable_postal_codes.includes(input.postalCode)) {
+    if (!servesPostalCode(settings.shipping_coverage, settings.serviceable_postal_codes, input.postalCode)) {
       return NextResponse.json({ error: "Online delivery is not configured for this postal code." }, { status: 409 });
     }
     if (!process.env.RAZORPAY_WEBHOOK_SECRET?.trim()) return NextResponse.json({ error: "Online payments are temporarily unavailable." }, { status: 503 });
     // Validate provider configuration before creating a pending order.
     const configuredKeyId = getRazorpayKeyId();
 
-    const requested = new Map<string, { productSlug: string; weightGrams: number; quantity: number }>();
+    const requested = new Map<string, (typeof input.items)[number]>();
     for (const item of input.items) {
       const key = `${item.productSlug}:${item.weightGrams}`;
       const previous = requested.get(key);
+      if (previous && previous.expectedUnitPricePaise !== item.expectedUnitPricePaise) return NextResponse.json({ error: "Inconsistent cart prices." }, { status: 409 });
       const quantity = (previous?.quantity || 0) + item.quantity;
       if (quantity > 99) return NextResponse.json({ error: "A product quantity exceeds the allowed maximum." }, { status: 400 });
       requested.set(key, { ...item, quantity });
@@ -60,19 +65,27 @@ export async function POST(request: Request) {
       const product = catalogue?.find((entry) => entry.slug === item.productSlug && entry.active);
       const variant = product?.product_variants?.find((entry) => entry.weight_grams === item.weightGrams && entry.active);
       if (!product || !variant) return NextResponse.json({ error: "A cart item is unavailable or has changed." }, { status: 409 });
-      if (variant.track_inventory && (variant.stock_quantity === null || variant.stock_quantity < item.quantity)) return NextResponse.json({ error: "A cart item does not have enough available stock." }, { status: 409 });
+      if (item.expectedUnitPricePaise !== variant.price_paise) return NextResponse.json({ error: "Cart prices changed. Refresh your cart.", code: "checkout_changed" }, { status: 409 });
+      if (!variant.track_inventory || variant.stock_quantity === null || variant.stock_quantity < item.quantity) return NextResponse.json({ error: "A cart item does not have enough available stock." }, { status: 409 });
       const lineTotal = variant.price_paise * item.quantity;
       if (!Number.isSafeInteger(lineTotal)) return NextResponse.json({ error: "Cart total is invalid." }, { status: 400 });
       subtotalPaise += lineTotal;
       snapshots.push({ product_id: product.id, product_variant_id: variant.id, product_name: product.name, product_slug: product.slug, variant_name: `${variant.weight_grams} g`, weight_grams: variant.weight_grams, unit_price_paise: variant.price_paise, quantity: item.quantity });
     }
     if (!Number.isSafeInteger(subtotalPaise) || subtotalPaise <= 0) return NextResponse.json({ error: "Cart total is invalid." }, { status: 400 });
-    const shippingPaise = calculateShippingPaise(subtotalPaise, settings.flat_shipping_paise, settings.free_shipping_threshold_paise);
-    if (shippingPaise === null) return NextResponse.json({ error: "Shipping is not configured." }, { status: 503 });
+    const quote = calculateCheckoutQuote(subtotalPaise, {
+      flatShippingPaise: settings.flat_shipping_paise, freeShippingThresholdPaise: settings.free_shipping_threshold_paise,
+      taxMode: settings.tax_mode, taxRateBps: settings.tax_rate_bps, taxShipping: settings.tax_shipping, discountMode: settings.discount_mode,
+    });
+    if (!quote) return NextResponse.json({ error: "Checkout pricing is unavailable." }, { status: 503 });
+    if (!acceptsQuote((raw as Record<string, unknown>).expectedQuote, quote)) {
+      return NextResponse.json({ error: "Totals changed. Refresh and review checkout.", code: "checkout_changed" }, { status: 409 });
+    }
+    const { shippingPaise, taxPaise, discountPaise } = quote;
 
     const { data: existing, error: existingError } = await admin.from("orders").select(retryOrderFields).eq("idempotency_key", input.idempotencyKey).maybeSingle();
     if (existingError) throw existingError;
-    if (existing && !checkoutMatchesOrder(existing, input, user?.id || null, snapshots, subtotalPaise, shippingPaise)) return NextResponse.json({ error: "Your cart or delivery details changed. Start a new checkout attempt.", code: "checkout_changed" }, { status: 409 });
+    if (existing && !checkoutMatchesOrder(existing, input, user?.id || null, snapshots, subtotalPaise, shippingPaise, taxPaise, discountPaise)) return NextResponse.json({ error: "Your cart or delivery details changed. Start a new checkout attempt.", code: "checkout_changed" }, { status: 409 });
 
     let order = existing;
     if (!order) {
@@ -90,6 +103,8 @@ export async function POST(request: Request) {
           p_customer_note: input.note,
           p_subtotal_paise: subtotalPaise,
           p_shipping_paise: shippingPaise,
+          p_tax_paise: taxPaise,
+          p_discount_paise: discountPaise,
           p_idempotency_key: input.idempotencyKey,
           p_items: [...snapshots].sort((a,b)=>String(a.product_variant_id).localeCompare(String(b.product_variant_id))),
         });
@@ -100,7 +115,7 @@ export async function POST(request: Request) {
         else if (error.message.toLowerCase().includes("idempotency")) {
           const { data: concurrent, error: concurrentError } = await admin.from("orders").select(retryOrderFields).eq("idempotency_key", input.idempotencyKey).single();
           if (concurrentError) throw concurrentError;
-          if (!checkoutMatchesOrder(concurrent, input, user?.id || null, snapshots, subtotalPaise, shippingPaise)) return NextResponse.json({ error: "Your cart or delivery details changed. Start a new checkout attempt.", code: "checkout_changed" }, { status: 409 });
+          if (!checkoutMatchesOrder(concurrent, input, user?.id || null, snapshots, subtotalPaise, shippingPaise, taxPaise, discountPaise)) return NextResponse.json({ error: "Your cart or delivery details changed. Start a new checkout attempt.", code: "checkout_changed" }, { status: 409 });
           order = concurrent;
           break;
         } else if (!error.message.toLowerCase().includes("order_number")) throw error;
@@ -110,11 +125,11 @@ export async function POST(request: Request) {
         const { data: created, error } = await admin.from("orders").select(retryOrderFields).eq("id", createdId).single();
         if (error) throw error;
         order = created;
-        await sendOrderEmailEvent("order_confirmation", { orderNumber, email: input.email, amountPaise: subtotalPaise + shippingPaise }).catch(() => undefined);
+        await sendOrderEmailEvent("order_confirmation", { orderNumber, email: input.email, amountPaise: quote.grandTotalPaise }).catch(() => undefined);
       }
     }
     if (!order) throw new Error("Order creation failed.");
-    if (order.payment_status === "paid" || order.payment_status === "refunded" || order.status === "cancelled") return NextResponse.json({ error: "This order cannot be paid again. Check its current status before placing another order." }, { status: 409 });
+    if (order.inventory_reservations.some((hold: { released_at: string | null }) => hold.released_at) || order.payment_status === "paid" || order.payment_status === "refunded" || order.status === "cancelled") return NextResponse.json({ error: "This order cannot be paid again. Check its current status before placing another order.", code: "checkout_closed" }, { status: 409 });
 
     let providerOrderId = order.razorpay_order_id;
     let keyId = configuredKeyId;
@@ -136,8 +151,8 @@ export async function POST(request: Request) {
           if (error || !finished) throw error || new Error("Payment initialization could not be saved.");
         }
       } catch (error) {
+        // A network failure can follow a successful provider POST. Keep payment pending for receipt reconciliation.
         await admin.rpc("finish_payment_initialization", { p_order_id: order.id, p_token: initializationToken, p_provider_order_id: "" });
-        await admin.rpc("apply_payment_event", { p_order_id: order.id, p_provider_event_id: `checkout-failed:${order.id}`, p_event_type: "checkout.order_creation_failed", p_target_status: "failed", p_provider_payment_id: "", p_payload: { code: "provider_order_creation_failed" } });
         throw error;
       }
     }

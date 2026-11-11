@@ -58,25 +58,25 @@ begin
  snap:=jsonb_build_array(jsonb_build_object('product_id',fixture,'product_variant_id',pack,'product_name','Fixture','product_slug','shs-dev-fixture','variant_name','100 g','weight_grams',100,'unit_price_paise',100,'quantity',1));
  update public.store_settings set checkout_enabled=false where settings_key='default';
  begin
-   perform public.create_pending_order('SHS-20261110-QAAB26',null,'a@example.invalid','9000000000','Fixture','{}',null,100,0,gen_random_uuid(),snap);
+   perform public.create_pending_order('SHS-20261110-QAAB26',null,'a@example.invalid','9000000000','Fixture','{"postalCode":"600001"}',null,100,0,gen_random_uuid(),snap);
    raise exception 'Disabled checkout accepted';
  exception when sqlstate 'SH003' then null; end;
- update public.store_settings set order_email_hook_enabled=true,policies_approved=true,checkout_enabled=true,flat_shipping_paise=0 where settings_key='default';
+ update public.store_settings set shipping_coverage='pan_india_serviceable',serviceable_postal_codes=array['600001'], tax_mode='none',discount_mode='none',order_email_hook_enabled=true,policies_approved=true,checkout_enabled=true,flat_shipping_paise=0 where settings_key='default';
  begin
-   perform public.create_pending_order('SHS-20261110-QAAB26',null,'a@example.invalid','9000000000','Fixture','{}',null,1,0,gen_random_uuid(),snap);
+   perform public.create_pending_order('SHS-20261110-QAAB26',null,'a@example.invalid','9000000000','Fixture','{"postalCode":"600001"}',null,1,0,gen_random_uuid(),snap);
    raise exception 'Incorrect order subtotal accepted';
  exception when sqlstate 'SH004' then null; end;
- oid:=public.create_pending_order('SHS-20261110-QAAB23',(select a from personas),'a@example.invalid','9000000000','Fixture','{}',null,100,0,order_key,snap);
+ oid:=public.create_pending_order('SHS-20261110-QAAB23',(select a from personas),'a@example.invalid','9000000000','Fixture','{"postalCode":"600001"}',null,100,0,order_key,snap);
  begin
-   perform public.create_pending_order('SHS-20261110-QAAB24',null,'b@example.invalid','9000000000','Fixture','{}',null,100,0,gen_random_uuid(),snap);
+   perform public.create_pending_order('SHS-20261110-QAAB24',null,'b@example.invalid','9000000000','Fixture','{"postalCode":"600001"}',null,100,0,gen_random_uuid(),snap);
    raise exception 'Last pack oversold';
  exception when sqlstate 'SH002' then null; end;
  begin
-   perform public.create_pending_order('SHS-20261110-QAAB25',null,'b@example.invalid','9000000000','Fixture','{}',null,100,0,order_key,snap);
+   perform public.create_pending_order('SHS-20261110-QAAB25',null,'b@example.invalid','9000000000','Fixture','{"postalCode":"600001"}',null,100,0,order_key,snap);
    raise exception 'Duplicate order accepted';
  exception when unique_violation then null; end;
  if (select count(*) from public.orders where order_number like 'SHS-20261110-QAAB%')<>1 then raise exception 'Partial orders survived'; end if;
- perform public.apply_payment_event(oid,'fixture-capture','test.capture','paid','pay_fixture','{"amount":100,"currency":"INR","signatureVerified":true}');
+ perform public.apply_payment_event(oid,'fixture-capture','test.capture','paid','pay_fixture','{"amount":100,"currency":"INR","captureStatus":"captured","signatureVerified":true}');
  if (select stock_quantity+reserved_quantity from public.product_variants where id=pack)<>0 then raise exception 'Capture inventory mismatch'; end if;
  if (select count(*) from public.notification_outbox where order_id=oid)<>2 then raise exception 'Order and payment events not queued'; end if;
  if (select count(*) from public.claim_order_notice('SHS-20261110-QAAB23','payment_success'))<>1 or

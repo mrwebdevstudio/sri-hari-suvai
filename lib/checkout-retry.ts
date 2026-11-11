@@ -16,6 +16,8 @@ export type RetryOrder = {
   address_snapshot: Record<string, unknown>;
   subtotal_paise: number;
   shipping_paise: number;
+  tax_paise: number;
+  discount_paise: number;
   grand_total_paise: number;
   order_items: OrderItemSnapshot[];
 };
@@ -26,12 +28,13 @@ function sortedItems(items: readonly OrderItemSnapshot[]): string {
 }
 
 export function checkoutMatchesOrder(order: RetryOrder, input: CheckoutInput, userId: string | null,
-  items: readonly OrderItemSnapshot[], subtotalPaise: number, shippingPaise: number): boolean {
+  items: readonly OrderItemSnapshot[], subtotalPaise: number, shippingPaise: number, taxPaise: number, discountPaise: number): boolean {
   const addressKeys = ["name", "phone", "addressLine1", "addressLine2", "city", "state", "postalCode"] as const;
   return order.user_id === userId && order.email === input.email && order.phone === input.phone &&
     order.customer_name === input.name && (order.customer_note || null) === input.note &&
     order.subtotal_paise === subtotalPaise && order.shipping_paise === shippingPaise &&
-    order.grand_total_paise === subtotalPaise + shippingPaise &&
+    order.tax_paise === taxPaise && order.discount_paise === discountPaise &&
+    order.grand_total_paise === subtotalPaise + shippingPaise + taxPaise - discountPaise &&
     addressKeys.every((key) => (order.address_snapshot?.[key] || null) === (input[key] || null)) &&
     sortedItems(order.order_items) === sortedItems(items);
 }

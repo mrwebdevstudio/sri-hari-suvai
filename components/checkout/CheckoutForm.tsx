@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 
 import { useCart } from "@/components/cart/CartProvider";
+import { calculateCheckoutQuote } from "@/lib/checkout-pricing";
 import { formatPrice, formatWeight } from "@/lib/currency";
 import { buildWhatsAppHref } from "@/lib/ordering";
 import type { PublicStoreSettings } from "@/lib/store";
@@ -61,18 +62,24 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
   const idempotencyKey = useRef<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  const shippingPaise = useMemo(() => {
-    if (settings.freeShippingThresholdPaise !== null && subtotalPaise >= settings.freeShippingThresholdPaise) return 0;
-    return settings.flatShippingPaise;
-  }, [settings.flatShippingPaise, settings.freeShippingThresholdPaise, subtotalPaise]);
+  const quote = useMemo(() => calculateCheckoutQuote(subtotalPaise, settings), [settings, subtotalPaise]);
   const whatsappHref = buildWhatsAppHref(settings.whatsappNumber || "");
+
+  function forgetAttempt() {
+    idempotencyKey.current = null;
+    try { sessionStorage.removeItem("shs-checkout-attempt"); } catch { /* Storage is optional. */ }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!items.length || !settings.checkoutEnabled) return;
+    if (!items.length || !settings.checkoutEnabled || !quote) return;
     setSubmitting(true);
     setMessage("");
+    try {
+      idempotencyKey.current ||= sessionStorage.getItem("shs-checkout-attempt");
+    } catch { /* The in-memory key still supports retries when storage is unavailable. */ }
     idempotencyKey.current ||= window.crypto.randomUUID();
+    try { sessionStorage.setItem("shs-checkout-attempt", idempotencyKey.current); } catch { /* Storage is optional. */ }
     const values = Object.fromEntries(new FormData(event.currentTarget));
 
     try {
@@ -81,13 +88,14 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...values,
+          expectedQuote: quote,
           idempotencyKey: idempotencyKey.current,
-          items: items.map(({ productSlug, weightGrams, quantity }) => ({ productSlug, weightGrams, quantity })),
+          items: items.map(({ productSlug, weightGrams, quantity }) => ({ productSlug, weightGrams, quantity, expectedUnitPricePaise: getProduct(productSlug)?.variants.find(v => v.weightGrams === weightGrams)?.pricePaise })),
         }),
       });
       const result = await response.json() as Record<string, string | number>;
       if (!response.ok) {
-        if (result.code === "checkout_changed") idempotencyKey.current = null;
+        if (result.code === "checkout_changed" || result.code === "checkout_closed") forgetAttempt();
         throw new Error(String(result.error || "Checkout could not be started."));
       }
       if (!(await loadRazorpay()) || !window.Razorpay) throw new Error("Payment checkout could not be loaded.");
@@ -113,6 +121,12 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
               setMessage(verified.error || "Payment verification failed. Your order was not marked paid.");
               return;
             }
+            if (verified.paymentStatus !== "paid") {
+              setSubmitting(false);
+              setMessage(`Payment is awaiting confirmation. Track order ${result.orderNumber} before retrying.`);
+              return;
+            }
+            forgetAttempt();
             clearCart();
             router.push(`/order-confirmation?order=${encodeURIComponent(String(result.orderNumber))}`);
           } catch {
@@ -133,7 +147,7 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
 
   if (!catalogueAvailable) return <div className="empty-state"><h2>Checkout is temporarily unavailable.</h2><p>We cannot verify current product prices. Your saved cart has been kept; please try again shortly.</p></div>;
   if (!items.length) return <div className="empty-state"><p className="eyebrow">Checkout</p><h2>Your cart is empty.</h2><Link className="button" href="/shop">Continue shopping</Link></div>;
-  if (!settings.checkoutEnabled || shippingPaise === null) {
+  if (!settings.checkoutEnabled || !quote) {
     const orderingDisabled = !settings.productOrderingEnabled;
     return <div className="empty-state"><p className="eyebrow">Online checkout unavailable</p><h2>{orderingDisabled ? "Online ordering is currently disabled." : "Shipping has not been configured."}</h2><p>{orderingDisabled ? "Use the configured direct contact option for current ordering availability." : "Online payment remains disabled until the store owner configures shipping."}</p>{whatsappHref ? <a className="button" href={whatsappHref} target="_blank" rel="noreferrer">Order on WhatsApp</a> : <Link className="button" href="/contact">Contact Sri Hari Suvai</Link>}</div>;
   }
@@ -155,7 +169,7 @@ export function CheckoutForm({ settings, defaults }: { settings: PublicStoreSett
       <aside className="cart-summary checkout-summary">
         <p className="eyebrow">Order summary</p><h2>Your order</h2>
         <div className="checkout-items">{items.map((item) => { const product = getProduct(item.productSlug); const variant = product?.variants.find((entry) => entry.weightGrams === item.weightGrams); return product && variant ? <div key={`${item.productSlug}-${item.weightGrams}`}><span>{product.name}<small>{formatWeight(item.weightGrams)} × {item.quantity}</small></span><strong>{formatPrice(variant.pricePaise * item.quantity)}</strong></div> : null; })}</div>
-        <dl className="order-totals"><div><dt>Subtotal</dt><dd>{formatPrice(subtotalPaise)}</dd></div><div><dt>Shipping</dt><dd>{shippingPaise === 0 ? "Free" : formatPrice(shippingPaise)}</dd></div><div><dt>Total</dt><dd>{formatPrice(subtotalPaise + shippingPaise)}</dd></div></dl>{settings.shippingNotice ? <p>{settings.shippingNotice}</p> : null}
+        <dl className="order-totals"><div><dt>Subtotal</dt><dd>{formatPrice(subtotalPaise)}</dd></div><div><dt>Shipping</dt><dd>{quote.shippingPaise === 0 ? "Free" : formatPrice(quote.shippingPaise)}</dd></div>{quote.taxPaise > 0 && <div><dt>Tax</dt><dd>{formatPrice(quote.taxPaise)}</dd></div>}<div><dt>Total</dt><dd>{formatPrice(quote.grandTotalPaise)}</dd></div></dl>{settings.shippingNotice ? <p>{settings.shippingNotice}</p> : null}
         {message ? <p className="form-message form-message--error" role="status">{message}</p> : null}
         <button className="button" type="submit" disabled={submitting}>{submitting ? "Opening secure payment…" : "Pay securely"}</button>
         <p>Payment status is confirmed only after server-side Razorpay verification.</p>

@@ -38,12 +38,12 @@ const order = {
   user_id: "customer-a", email: input.email, phone: input.phone, customer_name: input.name, customer_note: null,
   address_snapshot: { name: input.name, phone: input.phone, addressLine1: input.addressLine1, addressLine2: null,
     city: input.city, state: input.state, postalCode: input.postalCode },
-  subtotal_paise: 10000, shipping_paise: 500, grand_total_paise: 10500, order_items: items,
+  subtotal_paise: 10000, shipping_paise: 500, tax_paise: 0, discount_paise: 0, grand_total_paise: 10500, order_items: items,
 };
 
 test("identical checkout can retry but equal-priced swaps, address changes and ownership changes cannot", () => {
   const matches = (candidate = input, owner = "customer-a", snapshots = items, subtotal = 10000, shipping = 500) =>
-    checkoutMatchesOrder(order, candidate, owner, snapshots, subtotal, shipping);
+    checkoutMatchesOrder(order, candidate, owner, snapshots, subtotal, shipping, 0, 0);
   assert.equal(matches(), true);
   for (const key of ["name", "phone", "email", "addressLine1", "addressLine2", "city", "state", "postalCode", "note"]) {
     assert.equal(matches({ ...input, [key]: "changed" }), false, key);
@@ -58,5 +58,5 @@ test("identical checkout can retry but equal-priced swaps, address changes and o
 
 test("retry comparison is independent of item ordering", () => {
   const twoItems = [...items, { ...items[0], product_slug: "rasam-podi" }];
-  assert.equal(checkoutMatchesOrder({ ...order, order_items: twoItems }, input, "customer-a", [...twoItems].reverse(), 10000, 500), true);
+  assert.equal(checkoutMatchesOrder({ ...order, order_items: twoItems }, input, "customer-a", [...twoItems].reverse(), 10000, 500, 0, 0), true);
 });

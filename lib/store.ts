@@ -1,15 +1,18 @@
 import { siteConfig } from "@/lib/site";
 import { createPublicSupabaseClient } from "@/lib/supabase/public";
 
-export type PublicStoreSettings = {
+import type { PricingRules } from "./checkout-pricing";
+
+export type PublicStoreSettings = PricingRules & {
   checkoutEnabled: boolean;
   guestCheckoutEnabled: boolean;
   productOrderingEnabled: boolean;
-  flatShippingPaise: number | null;
-  freeShippingThresholdPaise: number | null;
   businessPhone: string | null;
   whatsappNumber: string | null;
   businessAddress: string | null;
+  secondaryPhone: string | null;
+  enquiryEmail: string | null;
+  instagramUrl: string | null;
   shippingNotice: string | null;
   maintenanceNotice: string | null;
   databaseConfigured: boolean;
@@ -18,7 +21,7 @@ export type PublicStoreSettings = {
 export async function getPublicStoreSettings(): Promise<PublicStoreSettings> {
   try {
     const supabase = createPublicSupabaseClient();
-    const { data, error } = await supabase.from("store_settings").select("checkout_enabled, guest_checkout_enabled, product_ordering_enabled, flat_shipping_paise, free_shipping_threshold_paise, shipping_notice, business_phone, whatsapp_number, business_address, maintenance_notice").eq("settings_key", "default").single();
+    const { data, error } = await supabase.from("store_settings").select("checkout_enabled, guest_checkout_enabled, product_ordering_enabled, flat_shipping_paise, free_shipping_threshold_paise, tax_mode, tax_rate_bps, tax_shipping, discount_mode, shipping_notice, business_phone, secondary_phone, enquiry_email, instagram_url, whatsapp_number, business_address, maintenance_notice").eq("settings_key", "default").single();
     if (error || !data) throw error || new Error("Store settings not found.");
     return {
       checkoutEnabled: data.checkout_enabled && data.product_ordering_enabled && data.flat_shipping_paise !== null,
@@ -26,6 +29,8 @@ export async function getPublicStoreSettings(): Promise<PublicStoreSettings> {
       productOrderingEnabled: data.product_ordering_enabled,
       flatShippingPaise: data.flat_shipping_paise,
       freeShippingThresholdPaise: data.free_shipping_threshold_paise,
+      taxMode: data.tax_mode, taxRateBps: data.tax_rate_bps, taxShipping: data.tax_shipping, discountMode: data.discount_mode,
+      secondaryPhone: data.secondary_phone, enquiryEmail: data.enquiry_email || siteConfig.email || null, instagramUrl: data.instagram_url,
       businessPhone: data.business_phone,
       whatsappNumber: data.whatsapp_number || siteConfig.whatsappNumber || null,
       businessAddress: data.business_address,
@@ -40,6 +45,8 @@ export async function getPublicStoreSettings(): Promise<PublicStoreSettings> {
       productOrderingEnabled: true,
       flatShippingPaise: null,
       freeShippingThresholdPaise: null,
+      taxMode: null, taxRateBps: null, taxShipping: null, discountMode: null,
+      secondaryPhone: null, enquiryEmail: siteConfig.email || null, instagramUrl: null,
       businessPhone: null,
       whatsappNumber: siteConfig.whatsappNumber || null,
       businessAddress: null,

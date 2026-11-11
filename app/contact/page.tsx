@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { buildMailtoHref, buildWhatsAppHref } from "@/lib/ordering";
-import { siteConfig } from "@/lib/site";
+import { getPublicStoreSettings } from "@/lib/store";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -15,10 +15,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ContactPage() {
-  const whatsappHref = buildWhatsAppHref(siteConfig.whatsappNumber);
-  const emailHref = buildMailtoHref(siteConfig.email, "Sri Hari Suvai enquiry");
-  const hasContact = Boolean(whatsappHref || emailHref);
+export default async function ContactPage() {
+  const settings = await getPublicStoreSettings();
+  const whatsappHref = buildWhatsAppHref(settings.whatsappNumber || "");
+  const secondaryWhatsApp = buildWhatsAppHref(settings.secondaryPhone || "");
+  const emailHref = buildMailtoHref(settings.enquiryEmail || "", "Sri Hari Suvai enquiry");
+  const hasContact = Boolean(whatsappHref || secondaryWhatsApp || emailHref || settings.instagramUrl);
 
   return (
     <div className="page-wrap contact-page">
@@ -27,6 +29,10 @@ export default function ContactPage() {
         <h1>Get in touch</h1>
         <p>
           Get in touch for questions about our products or an existing order.
+          {secondaryWhatsApp && settings.instagramUrl && <> For bulk orders, message us on{" "}
+            <a href={secondaryWhatsApp} target="_blank" rel="noreferrer">WhatsApp (+{settings.secondaryPhone})</a>
+            {" or "}<a href={settings.instagramUrl} target="_blank" rel="noreferrer">Instagram</a>.
+          </>}
         </p>
       </header>
 
@@ -48,7 +54,7 @@ export default function ContactPage() {
               {emailHref ? (
                 <a className="contact-card" href={emailHref}>
                   <span className="eyebrow">Email</span>
-                  <strong>{siteConfig.email}</strong>
+                  <strong>{settings.enquiryEmail}</strong>
                   <span>Opens your email application. <b aria-hidden="true">→</b></span>
                 </a>
               ) : null}
