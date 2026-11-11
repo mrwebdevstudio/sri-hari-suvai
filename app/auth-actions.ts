@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { hasAdminProfile } from "@/lib/auth";
 import {
   AUTH_MESSAGES,
   authCallbackPath,
   getAuthCallbackRedirect,
+  getLoginRedirect,
   getPasswordUpdateRedirect,
   isAuthEmailRateLimit,
-  safeAuthRedirectPath,
   withAuthMessage,
 } from "@/lib/auth-flow";
 import { absoluteUrl } from "@/lib/site";
@@ -27,14 +28,14 @@ export async function loginAction(formData: FormData) {
   if (!rate.allowed) redirect(withAuthMessage("/login", "error", "Too many login attempts. Try again later."));
   const email = field(formData, "email").toLowerCase();
   const password = field(formData, "password", 200);
-  const next = safeAuthRedirectPath(field(formData, "next", 500));
   if (!email || !password) redirect(withAuthMessage("/login", "error", "Email and password are required."));
 
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) redirect(withAuthMessage("/login", "error", "Email or password is incorrect."));
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) redirect(withAuthMessage("/login", "error", "Email or password is incorrect."));
+  const isAdmin = await hasAdminProfile(supabase, data.user.id);
   revalidatePath("/", "layout");
-  redirect(next);
+  redirect(getLoginRedirect(field(formData, "next", 500), isAdmin));
 }
 
 export async function signupAction(formData: FormData) {

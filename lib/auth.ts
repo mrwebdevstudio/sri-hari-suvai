@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -28,6 +29,10 @@ export async function getAdminUser() {
   const user = await getOptionalUser();
   if (!user) return null;
   const supabase = await createServerSupabaseClient();
-  const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  return data?.role === "admin" ? user : null;
+  return (await hasAdminProfile(supabase, user.id)) ? user : null;
+}
+
+export async function hasAdminProfile(supabase: SupabaseClient, userId: string) {
+  const { data } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  return data?.role === "admin";
 }

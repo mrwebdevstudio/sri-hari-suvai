@@ -30,11 +30,20 @@ export function safeAuthRedirectPath(value: string | null | undefined, fallback 
 
   try {
     const target = new URL(value, LOCAL_AUTH_BASE);
-    if (target.origin !== LOCAL_AUTH_BASE) return fallback;
+    if (target.origin !== LOCAL_AUTH_BASE || target.pathname.startsWith("//")) return fallback;
     return `${target.pathname}${target.search}`;
   } catch {
     return fallback;
   }
+}
+
+export function getLoginRedirect(requestedNext: string, isAdmin: boolean): string {
+  const landing = isAdmin ? "/admin" : "/account/profile";
+  const next = safeAuthRedirectPath(requestedNext, landing);
+  const path = next.split("?")[0].replace(/\/$/, "");
+  if (path === "/account" || (isAdmin && path === "/account/profile")) return landing;
+  if (!isAdmin && (path === "/admin" || path.startsWith("/admin/"))) return landing;
+  return next;
 }
 
 export function resolveAuthCallbackFlow(

@@ -5,11 +5,30 @@ import test from "node:test";
 import {
   AUTH_MESSAGES,
   getAuthCallbackRedirect,
+  getLoginRedirect,
   getPasswordUpdateRedirect,
   resolveAuthCallbackFlow,
   safeAuthRedirectPath,
   sanitizeAuthDisplayText,
 } from "../lib/auth-flow.ts";
+
+test("password login lands each role on its own home page", () => {
+  for (const next of ["", "/account", "/account/", "/account/profile", "https://example.invalid", "/.//example.invalid"]) {
+    assert.equal(getLoginRedirect(next, true), "/admin");
+    assert.equal(getLoginRedirect(next, false), "/account/profile");
+  }
+});
+
+test("password login preserves local return paths and limits admin destinations to administrators", () => {
+  for (const isAdmin of [true, false]) {
+    for (const next of ["/checkout", "/account/orders?page=2", "/account/addresses"]) {
+      assert.equal(getLoginRedirect(next, isAdmin), next);
+    }
+  }
+  const adminPage = "/admin/orders?status=pending";
+  assert.equal(getLoginRedirect(adminPage, true), adminPage);
+  assert.equal(getLoginRedirect(adminPage, false), "/account/profile");
+});
 
 test("a verified invitation opens the existing private password-setting form", () => {
   const flow = resolveAuthCallbackFlow(null, null, "invite");
